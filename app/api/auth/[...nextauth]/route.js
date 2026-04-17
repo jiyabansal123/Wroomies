@@ -8,6 +8,13 @@ const handler = NextAuth({
       clientId: process.env.AZURE_CLIENT_ID,
       clientSecret: process.env.AZURE_CLIENT_SECRET,
       tenantId: process.env.AZURE_TENANT_ID,
+      authorization: {
+        params: {
+          // Force Microsoft to show the account picker instead of silently reusing
+          // the previous Entra session.
+          prompt: "select_account",
+        },
+      },
     }),
   ],
 
@@ -26,10 +33,15 @@ const handler = NextAuth({
       }
 
       // 🔥 SAVE USER TO SUPABASE
-      const { error } = await supabase.from("users").upsert({
-        email: email,
-        name: name,
-      });
+      const { error } = await supabase
+        .from("users")
+        .upsert(
+          {
+            email: email,
+            name: name,
+          },
+          { onConflict: "email" },
+        );
 
       if (error) {
         console.log("SUPABASE ERROR:", error);
