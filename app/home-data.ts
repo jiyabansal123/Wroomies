@@ -9,15 +9,27 @@ export type UserProfile = {
   preferences: Record<string, string> | null;
 };
 
+export type MatchStatus = "none" | "pending_sent" | "pending_received" | "accepted" | "rejected";
+
+export type MatchRequest = {
+  id: string;
+  sender_email: string;
+  receiver_email: string;
+  status: "pending" | "accepted" | "rejected";
+  created_at: string;
+};
+
 export type MatchUser = UserProfile & {
   primaryScore: number;
   preferenceScore: number;
   totalScore: number;
   score: number;
   reasons?: string[];
+  matchStatus?: MatchStatus;
+  requestId?: string;
 };
 
-export type TabKey = "matches" | "profile" | "preferences";
+export type TabKey = "matches" | "profile" | "preferences" | "chat";
 
 export const YEAR_OPTIONS = ["1", "2", "3", "4", "5"];
 export const COURSE_OPTIONS = ["btech", "bca", "mba", "mtech", "bba", "law", "liberal arts", "other"];
@@ -367,28 +379,39 @@ export function calculatePreferenceSimilarity(
 
 export function calculateMatch(userA: UserProfile, userB: UserProfile) {
   // 0. Gender Match (Mandatory fallback)
-  if (userA.gender !== userB.gender) return { primaryScore: 0, preferenceScore: 0, totalScore: 0, score: 0 };
+  if (userA.gender !== userB.gender) return { primaryScore: 0, preferenceScore: 0, totalScore: 0, score: 0, reasons: [] };
 
-  // Primary Score logic (Normalized to 100)
-  // Hierarchy: Gender -> Year/Course
+  const reasons: string[] = [];
+
+  // Primary Score logic
   const yearScore = getAcademicYearScore(userA.year, userB.year);
+  if (yearScore === 100) reasons.push("Same year of study");
+  else if (yearScore >= 70) reasons.push("Close academic seniority");
+
   const courseScore = getAcademicCourseScore(userA.course, userB.course);
-  
-  let primaryScore = (yearScore + courseScore) / 2;
+  if (courseScore === 100) reasons.push(`Both in ${userA.course?.toUpperCase()}`);
 
   const preferenceScore = Math.round(calculatePreferenceSimilarity(
     userA.preferences,
     userB.preferences,
   ));
 
-  const totalScore = Math.round(
-    primaryScore * 0.7 + preferenceScore * 0.3,
-  );
+  // Lifestyle reasons
+  if (userA.preferences && userB.preferences) {
+    if (userA.preferences.cleanliness === userB.preferences.cleanliness) reasons.push("Similar cleanliness standards");
+    if (userA.preferences.sleep === userB.preferences.sleep) reasons.push("Compatible sleep schedules");
+    if (userA.preferences.noise === userB.preferences.noise) reasons.push("Same noise level preference");
+    if (userA.preferences.guests === userB.preferences.guests) reasons.push("Aligned on guest expectations");
+  }
+
+  const primaryScore = (yearScore + courseScore) / 2;
+  const totalScore = Math.round(primaryScore * 0.7 + preferenceScore * 0.3);
 
   return {
     primaryScore,
     preferenceScore,
     totalScore,
     score: totalScore,
+    reasons: reasons.slice(0, 3) // Show top 3 reasons
   };
 }

@@ -27,8 +27,10 @@ import {
   MatchUser,
   calculateMatch,
   getProgressValue,
+  MatchRequest,
+  MatchStatus,
 } from "./home-data";
-import { MatchDetailModal } from "./home-ui";
+import { MatchDetailModal, ChatWindow } from "./home-ui";
 
 export default function Home() {
   const { data: session, status } = useSession();
@@ -48,9 +50,19 @@ export default function Home() {
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState<TabKey>("matches");
   const [usePreferences, setUsePreferences] = useState(true);
-  const [selectedMatch, setSelectedMatch] = useState<MatchUser | null>(null);
+  const [selectedMatchEmail, setSelectedMatchEmail] = useState<string | null>(null);
+  const [matchRequests, setMatchRequests] = useState<MatchRequest[]>([]);
+  const [selectedChatUser, setSelectedChatUser] = useState<MatchUser | null>(null);
+  const [messages, setMessages] = useState<any[]>([]);
+  const [loadingChat, setLoadingChat] = useState(false);
+  const [success, setSuccess] = useState("");
+  const [chatUsers, setChatUsers] = useState<MatchUser[]>([]);
+  const [isRetaking, setIsRetaking] = useState(false);
+  const [isDemoMode, setIsDemoMode] = useState(false);
 
-  const userEmail = session?.user?.email ?? "";
+  const userEmail = isDemoMode ? "demo@wroomies.com" : (session?.user?.email ?? "");
+  const demoUser = { email: "demo@wroomies.com", name: "Demo Student" };
+  const effectiveSession = isDemoMode ? { user: demoUser } : session;
   const currentQuestion = QUESTIONS[currentQuestionIndex];
   const selectedValue = currentQuestion ? answers[currentQuestion.id] : undefined;
 
@@ -80,17 +92,42 @@ export default function Home() {
   }, [profileCompletionPercent, preferencesCompletionPercent]);
 
   const processedMatches = useMemo(() => {
-    return matches.map(m => ({
-      ...m,
-      totalScore: usePreferences ? m.totalScore : m.primaryScore
-    }));
-  }, [matches, usePreferences]);
+    return matches.map(m => {
+      // Find match status. Prioritize 'accepted' if multiple exist.
+      const relevantRequests = matchRequests.filter(
+        r => (r.sender_email === userEmail && r.receiver_email === m.email) ||
+             (r.receiver_email === userEmail && r.sender_email === m.email)
+      );
+      
+      const request = relevantRequests.find(r => r.status === "accepted") || relevantRequests[0];
+
+      let matchStatus: MatchStatus = "none";
+      if (request) {
+        if (request.status === "accepted") matchStatus = "accepted";
+        else if (request.status === "rejected") matchStatus = "rejected";
+        else if (request.sender_email === userEmail) matchStatus = "pending_sent";
+        else matchStatus = "pending_received";
+      }
+
+      return {
+        ...m,
+        totalScore: usePreferences ? m.totalScore : m.primaryScore,
+        matchStatus,
+        requestId: request?.id
+      };
+    });
+  }, [matches, matchRequests, usePreferences, userEmail]);
 
   const totalMatchesFound = processedMatches.length;
   const bestMatch = useMemo(() => {
     if (processedMatches.length === 0) return null;
     return [...processedMatches].sort((a, b) => b.totalScore - a.totalScore)[0];
   }, [processedMatches]);
+
+  const selectedMatch = useMemo(() => {
+    if (!selectedMatchEmail) return null;
+    return processedMatches.find(m => m.email === selectedMatchEmail) || null;
+  }, [selectedMatchEmail, processedMatches]);
 
   useEffect(() => {
     const fetchCurrentUser = async () => {
@@ -101,6 +138,27 @@ export default function Home() {
 
       setLoadingProfile(true);
       setError("");
+
+      if (isDemoMode) {
+        setProfile({
+          email: "demo@wroomies.com",
+          name: "Demo Student",
+          year: "2",
+          course: "btech",
+          gender: "male",
+          room_number: "C-402",
+          is_open_to_switch: true,
+          preferences: { cleanliness: "high", noise: "quiet" }
+        });
+        setYear("2");
+        setCourse("btech");
+        setGender("male");
+        setRoomNumber("C-402");
+        setIsOpenToSwitch(true);
+        setAnswers({ cleanliness: "high", noise: "quiet" });
+        setLoadingProfile(false);
+        return;
+      }
 
       try {
         const { data, error: fetchError } = await supabase
@@ -133,6 +191,184 @@ export default function Home() {
   }, [userEmail]);
 
   useEffect(() => {
+    if (!userEmail) return;
+
+    const fetchMatchRequests = async () => {
+      if (isDemoMode) {
+        const mockRequests: MatchRequest[] = [
+          { id: "demo-req-1", sender_email: "jb@demo.com", receiver_email: userEmail, status: "accepted", created_at: new Date().toISOString() }
+        ];
+        setMatchRequests(mockRequests);
+        
+        // Fetch mock profiles
+        const mockJB = {
+          email: "jb@demo.com",
+          name: "JB - Designer (Demo)",
+          year: "3",
+          course: "btech",
+          gender: "male",
+          room_number: "A-101",
+          is_open_to_switch: false,
+          preferences: { cleanliness: "high", noise: "quiet", sleep: "late" }
+        };
+
+        setChatUsers([{
+          ...mockJB,
+          matchStatus: 'accepted' as MatchStatus,
+          requestId: "demo-req-1",
+          primaryScore: 100,
+          preferenceScore: 90,
+          totalScore: 97,
+          score: 97
+        }]);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("match_requests")
+        .select("*")
+        .or(`sender_email.eq.${userEmail},receiver_email.eq.${userEmail}`);
+
+      if (!error && data) {
+        setMatchRequests(data);
+        
+        // Fetch profiles for accepted matches
+        const acceptedEmails = data
+          .filter(r => r.status === 'accepted')
+          .map(r => r.sender_email === userEmail ? r.receiver_email : r.sender_email);
+
+        if (acceptedEmails.length > 0) {
+          const { data: userData } = await supabase
+            .from("users")
+            .select("email, name, year, course, gender, preferences, room_number, is_open_to_switch")
+            .in("email", acceptedEmails);
+          
+          if (userData) {
+            const mapped = userData.map(u => {
+              const req = data.find(r => 
+                (r.sender_email === userEmail && r.receiver_email === u.email) ||
+                (r.receiver_email === userEmail && r.sender_email === u.email)
+              );
+              return {
+                ...u,
+                matchStatus: 'accepted' as MatchStatus,
+                requestId: req?.id
+              } as MatchUser;
+            });
+            setChatUsers(mapped);
+          }
+        } else {
+          setChatUsers([]);
+        }
+      }
+    };
+
+    fetchMatchRequests();
+
+    // Subscribe to match_requests
+    const channel = supabase
+      .channel("match_requests_changes")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "match_requests" },
+        (payload) => {
+          const newRequest = payload.new as MatchRequest;
+          if (newRequest.sender_email === userEmail || newRequest.receiver_email === userEmail) {
+            setMatchRequests((prev) => [...prev.filter(r => r.id !== newRequest.id), newRequest]);
+          }
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "match_requests" },
+        (payload) => {
+          const updatedRequest = payload.new as MatchRequest;
+          if (updatedRequest.sender_email === userEmail || updatedRequest.receiver_email === userEmail) {
+            setMatchRequests((prev) => prev.map(r => r.id === updatedRequest.id ? updatedRequest : r));
+          }
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "match_requests" },
+        (payload) => {
+          const deletedRequest = payload.old;
+          setMatchRequests((prev) => prev.filter(r => r.id !== deletedRequest.id));
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [userEmail]);
+
+  useEffect(() => {
+    if (!selectedChatUser || !userEmail) {
+      setMessages([]);
+      return;
+    }
+
+    const fetchMessages = async () => {
+      if (isDemoMode) {
+        setMessages([
+          { id: "m1", sender_email: "jb@demo.com", receiver_email: userEmail, content: "Hey! Welcome to the Demo. This is exactly how the real chat looks.", created_at: new Date().toISOString() },
+          { id: "m2", sender_email: userEmail, receiver_email: "jb@demo.com", content: "That looks great. Can I take the questionnaire too?", created_at: new Date().toISOString() },
+          { id: "m3", sender_email: "jb@demo.com", receiver_email: userEmail, content: "Absolutely! Go to the Preferences tab and answer some questions to see your score update.", created_at: new Date().toISOString() }
+        ]);
+        setLoadingChat(false);
+        return;
+      }
+
+      setLoadingChat(true);
+      const { data, error } = await supabase
+        .from("messages")
+        .select("*")
+        .or(`and(sender_email.eq.${userEmail},receiver_email.eq.${selectedChatUser.email}),and(sender_email.eq.${selectedChatUser.email},receiver_email.eq.${userEmail})`)
+        .order("created_at", { ascending: true });
+
+      if (!error && data) {
+        setMessages(data);
+      }
+      setLoadingChat(false);
+    };
+
+    fetchMessages();
+
+    const channel = supabase
+      .channel(`chat_${selectedChatUser.email}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "messages" },
+        (payload) => {
+          const newMessage = payload.new;
+          const isRelevant = 
+            (newMessage.sender_email === userEmail && newMessage.receiver_email === selectedChatUser.email) ||
+            (newMessage.sender_email === selectedChatUser.email && newMessage.receiver_email === userEmail);
+          
+          if (isRelevant) {
+            setMessages((prev) => {
+              // Check if message already exists (to avoid duplicates from optimistic updates)
+              if (prev.some(m => m.id === newMessage.id)) return prev;
+              
+              // Remove the optimistic placeholder which has a matching content and sender
+              const filtered = prev.filter(m => 
+                !(m.id.startsWith('temp-') && m.sender_email === newMessage.sender_email && m.content === newMessage.content)
+              );
+              
+              return [...filtered, newMessage];
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [selectedChatUser, userEmail]);
+
+  useEffect(() => {
     if (!profile?.preferences) {
       setCurrentQuestionIndex(0);
       return;
@@ -157,13 +393,22 @@ export default function Home() {
     try {
       const payload = {
         email: userEmail,
-        name: session?.user?.name ?? profile?.name ?? "",
+        name: isDemoMode ? "Demo Student" : (session?.user?.name ?? profile?.name ?? ""),
         year,
         course,
         gender,
         room_number: roomNumber,
         is_open_to_switch: isOpenToSwitch,
       };
+
+      if (isDemoMode) {
+        setProfile({ ...payload, preferences: answers });
+        setSuccess("Demo profile updated locally!");
+        setTimeout(() => setSuccess(""), 4000);
+        setActiveTab(hasCompleteQuestionnaire ? "matches" : "preferences");
+        setSavingProfile(false);
+        return;
+      }
 
       const { data, error: upsertError } = await supabase
         .from("users")
@@ -193,16 +438,27 @@ export default function Home() {
     setError("");
 
     try {
-      const { data, error: fetchError } = await supabase
-        .from("users")
-        .select("email, name, year, course, gender, preferences, room_number, is_open_to_switch");
+      let allUsers: UserProfile[] = [];
+      
+      if (isDemoMode) {
+        allUsers = [
+          { email: "alex@demo.com", name: "Alex - Demo User", year: "2", course: "btech", gender: "male", room_number: "C-101", is_open_to_switch: true, preferences: { cleanliness: "high", sleep: "early" } },
+          { email: "sam@demo.com", name: "Sam - (No Sleep)", year: "2", course: "btech", gender: "male", room_number: "C-102", is_open_to_switch: false, preferences: { cleanliness: "low", sleep: "late" } },
+          { email: "jb@demo.com", name: "JB - Designer (Demo)", year: "3", course: "btech", gender: "male", room_number: "A-101", is_open_to_switch: false, preferences: { cleanliness: "high", noise: "quiet" } }
+        ];
+      } else {
+        const { data, error: fetchError } = await supabase
+          .from("users")
+          .select("email, name, year, course, gender, preferences, room_number, is_open_to_switch");
 
-      if (fetchError) {
-        setError(`Could not fetch matches: ${fetchError.message}`);
-        return;
+        if (fetchError) {
+          setError(`Could not fetch matches: ${fetchError.message}`);
+          return;
+        }
+        allUsers = data ?? [];
       }
 
-      const sameGender = (data ?? []).filter(
+      const sameGender = allUsers.filter(
         (u) => u.gender === profile.gender && u.email !== profile.email,
       );
 
@@ -214,6 +470,7 @@ export default function Home() {
           preferenceScore: result.preferenceScore,
           totalScore: result.totalScore,
           score: result.score,
+          reasons: result.reasons,
         };
       });
 
@@ -226,6 +483,87 @@ export default function Home() {
     }
   };
 
+  const handleSendRequest = async (receiverEmail: string) => {
+    if (isDemoMode) {
+      setSuccess("Match request sent (Demo Mode)!");
+      setTimeout(() => setSuccess(""), 4000);
+      return;
+    }
+    const { error } = await supabase
+      .from("match_requests")
+      .insert({
+        sender_email: userEmail,
+        receiver_email: receiverEmail,
+        status: "pending"
+      });
+    
+    if (error) {
+      setError(error.message);
+    } else {
+      setSuccess("Match request sent successfully!");
+      setTimeout(() => setSuccess(""), 4000);
+    }
+  };
+
+  const handleAcceptRequest = async (id: string) => {
+    const { error } = await supabase
+      .from("match_requests")
+      .update({ status: "accepted" })
+      .eq("id", id);
+    
+    if (error) {
+      setError(error.message);
+    } else {
+      setSuccess("Match accepted! You can now chat with them.");
+      setTimeout(() => setSuccess(""), 4000);
+    }
+  };
+
+  const handleRejectRequest = async (id: string) => {
+    const { error } = await supabase
+      .from("match_requests")
+      .update({ status: "rejected" })
+      .eq("id", id);
+    
+    if (error) {
+      setError(error.message);
+    } else {
+      setSuccess("Match request rejected.");
+      setTimeout(() => setSuccess(""), 4000);
+    }
+  };
+
+  const handleSendMessage = async (content: string) => {
+    if (!selectedChatUser) return;
+
+    const optimisticMessage = { 
+      id: `temp-${Date.now()}`, 
+      sender_email: userEmail, 
+      receiver_email: selectedChatUser.email, 
+      content, 
+      created_at: new Date().toISOString() 
+    };
+
+    // Optimistic Update: Show message immediately
+    setMessages(prev => [...prev, optimisticMessage]);
+
+    if (isDemoMode) return;
+
+    const { error } = await supabase
+      .from("messages")
+      .insert({
+        sender_email: userEmail,
+        receiver_email: selectedChatUser.email,
+        content
+      });
+
+    if (error) {
+      setError("Failed to send message: " + error.message);
+      // Rollback on error: remove the optimistic message
+      setMessages(prev => prev.filter(m => m.id !== optimisticMessage.id));
+    }
+  };
+
   const saveQuestionnaire = async () => {
     if (!userEmail) return;
 
@@ -233,6 +571,16 @@ export default function Home() {
     setError("");
 
     try {
+      if (isDemoMode) {
+        setProfile((previous) => (previous ? { ...previous, preferences: answers } : previous));
+        setSuccess("Questionnaire saved locally!");
+        setTimeout(() => setSuccess(""), 4000);
+        setActiveTab("matches");
+        setSavingAnswers(false);
+        setIsRetaking(false);
+        return;
+      }
+
       const { error: updateError } = await supabase
         .from("users")
         .update({ preferences: answers })
@@ -250,11 +598,12 @@ export default function Home() {
       setError("Unexpected error while saving your questionnaire.");
     } finally {
       setSavingAnswers(false);
+      setIsRetaking(false);
     }
   };
 
   if (status === "loading") return <LoadingView message="Checking session..." />;
-  if (status === "unauthenticated") return <AuthView />;
+  if (status === "unauthenticated" && !isDemoMode) return <AuthView onDemoLogin={() => setIsDemoMode(true)} />;
   if (loadingProfile) return <LoadingView message="Loading your profile..." />;
 
   return (
@@ -266,67 +615,88 @@ export default function Home() {
       </div>
 
       <div className="relative mx-auto flex min-h-screen max-w-6xl gap-6 px-4 py-4 sm:px-6 lg:px-8">
-        <aside className="hidden w-[280px] flex-shrink-0 flex-col rounded-[32px] border border-[var(--border)] bg-[var(--panel)] p-5 shadow-[var(--card-shadow)] lg:flex">
-          <div className="rounded-[28px] border border-[var(--border)] bg-[linear-gradient(180deg,rgba(240,96,79,0.16),rgba(255,255,255,0.03))] p-5">
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-muted)]">Wroomies</p>
-            <h1 className="mt-3 text-3xl font-semibold tracking-[-0.05em] text-[var(--foreground)]">
-              Roommate search with more clarity.
-            </h1>
-          </div>
-
-          <div className="mt-6 space-y-2">
-            <TabButton active={activeTab === "matches"} label="Matches" onClick={() => setActiveTab("matches")} />
-            <TabButton active={activeTab === "profile"} label="Profile" onClick={() => setActiveTab("profile")} />
-            <TabButton active={activeTab === "preferences"} label="Preferences" onClick={() => setActiveTab("preferences")} />
-          </div>
-
-          <div className="mt-6 rounded-[28px] border border-[var(--border)] bg-[var(--panel-muted)] p-5">
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-muted)]">Ready to match</p>
-            <p className="mt-2 text-4xl font-semibold tracking-[-0.06em] text-[var(--foreground)]">{readinessPercent}%</p>
-            <div className="mt-4 h-2 overflow-hidden rounded-full bg-[rgba(255,255,255,0.07)]">
-              <div className="h-full rounded-full bg-[linear-gradient(90deg,var(--brand),var(--brand-soft))]" style={{ width: `${readinessPercent}%` }} />
+        <aside className="sticky top-4 hidden h-[calc(100vh-2rem)] w-[280px] flex-shrink-0 flex-col rounded-[32px] border border-[var(--border)] bg-[var(--panel)] p-4 shadow-[var(--card-shadow)] lg:flex">
+          <div className="flex flex-1 flex-col gap-4 overflow-y-auto pr-1 scrollbar-hide">
+            {/* Header */}
+            <div className="rounded-[28px] border border-[var(--border)] bg-[linear-gradient(180deg,rgba(240,96,79,0.16),rgba(255,255,255,0.03))] p-5">
+              <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-[var(--brand-soft)]">Wroomies</p>
+              <h1 className="mt-3 text-2xl font-semibold leading-tight tracking-[-0.04em] text-[var(--foreground)]">
+                Roommate search with more clarity.
+              </h1>
             </div>
-            <div className="mt-5 flex flex-wrap gap-2">
-              <ProgressPill label="Profile" value={profileCompletionPercent} />
-              <ProgressPill label="Preferences" value={preferencesCompletionPercent} />
+
+            {/* Nav */}
+            <div className="space-y-1.5">
+              <TabButton active={activeTab === "matches"} label="Find Matches" onClick={() => setActiveTab("matches")} />
+              <TabButton active={activeTab === "profile"} label="Profile" onClick={() => setActiveTab("profile")} />
+              <TabButton active={activeTab === "preferences"} label="Preferences" onClick={() => setActiveTab("preferences")} />
+              {matchRequests.some(r => r.status === 'accepted') && (
+                <TabButton active={activeTab === "chat"} label="Your Matches" onClick={() => setActiveTab("chat")} />
+              )}
+            </div>
+
+            {/* Readiness Card */}
+            <div className="rounded-[28px] border border-[var(--border)] bg-[var(--panel-muted)] p-5">
+              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--text-muted)]">Ready to match</p>
+              <p className="mt-2 text-4xl font-semibold tracking-[-0.06em] text-[var(--foreground)]">{readinessPercent}%</p>
+              <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-[rgba(255,255,255,0.07)]">
+                <div className="h-full rounded-full bg-[linear-gradient(90deg,var(--brand),var(--brand-soft))]" style={{ width: `${readinessPercent}%` }} />
+              </div>
+              <div className="mt-5 flex flex-col gap-2">
+                <ProgressPill label="Profile" value={profileCompletionPercent} />
+                <ProgressPill label="Preferences" value={preferencesCompletionPercent} />
+              </div>
             </div>
           </div>
 
-          <div className="mt-auto rounded-[28px] border border-[var(--border)] bg-[var(--panel-muted)] p-5">
-            <p className="text-sm font-medium text-[var(--foreground)]">{session?.user?.name ?? "Student"}</p>
-            <p className="mt-1 break-all text-sm text-[var(--text-secondary)]">{userEmail}</p>
-            <button className={`mt-5 w-full ${secondaryButtonClass}`} onClick={() => signOut()}>
-              Sign out
+          {/* User Profile Card */}
+          <div className="mt-4 rounded-[28px] border border-[var(--border)] bg-[var(--panel-muted)] p-5">
+            <div className="flex flex-col gap-1">
+              <p className="truncate text-sm font-semibold text-[var(--foreground)]">{effectiveSession?.user?.name ?? "Student"}</p>
+              <p className="truncate text-[11px] text-[var(--text-secondary)] opacity-70">{userEmail}</p>
+            </div>
+            <button className={`mt-4 w-full ${secondaryButtonClass} py-2.5 text-xs`} onClick={() => isDemoMode ? setIsDemoMode(false) : signOut()}>
+              {isDemoMode ? "Exit Demo" : "Sign out"}
             </button>
+            <div className="mt-5 pt-4 border-t border-[var(--border)] opacity-30 transition hover:opacity-100">
+              <p className="text-center text-[9px] font-bold uppercase tracking-[0.4em] text-[var(--text-muted)] cursor-default">
+                made by JB
+              </p>
+            </div>
           </div>
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col gap-5">
           <header className="rounded-2xl border border-[var(--border)] bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(19,22,31,0.92))] p-5 shadow-[var(--card-shadow)] sm:p-6">
-            <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
-              <div className="max-w-3xl">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[var(--text-muted)]">Dashboard</p>
-                <h2 className="mt-2 text-3xl font-semibold tracking-[-0.06em] text-[var(--foreground)] sm:text-4xl">
-                  {hasCompleteProfile && hasCompleteQuestionnaire
-                    ? "Your shortlist is ready."
-                    : "Complete your setup for better matches."}
-                </h2>
-                <p className="mt-3 max-w-2xl text-xs leading-6 text-[var(--text-secondary)]">
-                  Review compatibility based on academic structure and daily lifestyle routines.
-                </p>
-              </div>
+            {activeTab === "matches" && (
+              <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+                <div className="max-w-3xl">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[var(--text-muted)]">Dashboard</p>
+                  <h2 className="mt-2 text-3xl font-semibold tracking-[-0.06em] text-[var(--foreground)] sm:text-4xl">
+                    {hasCompleteProfile && hasCompleteQuestionnaire
+                      ? "Your shortlist is ready."
+                      : "Complete your setup for better matches."}
+                  </h2>
+                  <p className="mt-3 max-w-2xl text-xs leading-6 text-[var(--text-secondary)]">
+                    Review compatibility based on academic structure and daily lifestyle routines.
+                  </p>
+                </div>
 
-              <div className="grid gap-3 sm:grid-cols-3 xl:min-w-[420px]">
-                <StatCard label="Readiness" value={`${readinessPercent}%`} hint={readinessPercent === 100 ? "Everything needed for matching is in place." : "A little more setup improves recommendation quality."} />
-                <StatCard label="Best score" value={bestMatch ? `${bestMatch.totalScore}%` : "--"} hint={bestMatch ? `${bestMatch.name ?? "Your top match"} is leading right now.` : "Run matching once your setup is ready."} />
-                <StatCard label="Candidates" value={String(totalMatchesFound)} hint={totalMatchesFound > 0 ? "Current ranked shortlist." : "No shortlist generated yet."} />
+                <div className="grid gap-3 sm:grid-cols-3 xl:min-w-[420px]">
+                  <StatCard label="Readiness" value={`${readinessPercent}%`} hint={readinessPercent === 100 ? "Everything needed for matching is in place." : "A little more setup improves recommendation quality."} />
+                  <StatCard label="Best score" value={bestMatch ? `${bestMatch.totalScore}%` : "--"} hint={bestMatch ? `${bestMatch.name ?? "Your top match"} is leading right now.` : "Run matching once your setup is ready."} />
+                  <StatCard label="Candidates" value={String(totalMatchesFound)} hint={totalMatchesFound > 0 ? "Current ranked shortlist." : "No shortlist generated yet."} />
+                </div>
               </div>
-            </div>
+            )}
 
-            <div className="mt-6 flex flex-wrap gap-3 lg:hidden">
-              <TabButton active={activeTab === "matches"} label="Matches" onClick={() => setActiveTab("matches")} />
+            <div className={`${activeTab === "matches" ? "mt-6" : "mt-0"} flex flex-wrap gap-3 lg:hidden`}>
+              <TabButton active={activeTab === "matches"} label="Find Matches" onClick={() => setActiveTab("matches")} />
               <TabButton active={activeTab === "profile"} label="Profile" onClick={() => setActiveTab("profile")} />
               <TabButton active={activeTab === "preferences"} label="Preferences" onClick={() => setActiveTab("preferences")} />
+              {matchRequests.some(r => r.status === 'accepted') && (
+                <TabButton active={activeTab === "chat"} label="Your Matches" onClick={() => setActiveTab("chat")} />
+              )}
             </div>
           </header>
 
@@ -376,7 +746,7 @@ export default function Home() {
               title={hasCompleteQuestionnaire ? "Review your lifestyle answers" : "Build a stronger roommate profile"}
               description={hasCompleteQuestionnaire ? "You can revisit any answer at any time. Saving again will update future recommendations." : "Answer the prompts below so matching reflects daily routines, noise tolerance, cleanliness, and shared-space expectations."}
             >
-              {!hasCompleteQuestionnaire && currentQuestion ? (
+              {(!hasCompleteQuestionnaire || isRetaking) && currentQuestion ? (
                 <div className="space-y-6">
                   <div className="rounded-[24px] border border-[var(--border)] bg-[var(--panel-muted)] p-4">
                     <div className="mb-3 flex items-center justify-between text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
@@ -415,18 +785,32 @@ export default function Home() {
                   </div>
                 </div>
               ) : (
-                <div className="grid gap-3 lg:grid-cols-2">
-                  {QUESTIONS.map((question) => {
-                    const answerKey = profile?.preferences?.[question.id];
-                    const answer = question.options.find((option) => option.value === answerKey);
-                    return (
-                      <div key={question.id} className="rounded-[24px] border border-[var(--border)] bg-[var(--panel-muted)] p-4">
-                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">Preference</p>
-                        <p className="mt-3 text-base font-medium leading-7 text-[var(--foreground)]">{question.question}</p>
-                        <p className="mt-3 text-sm leading-6 text-[var(--text-secondary)]">{answer?.label ?? "Not answered"}</p>
-                      </div>
-                    );
-                  })}
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-medium text-[var(--text-secondary)]">You've completed the questionnaire. Re-taking it will overwrite your current preferences.</p>
+                    <button 
+                      className={primaryButtonClass}
+                      onClick={() => {
+                        setIsRetaking(true);
+                        setCurrentQuestionIndex(0);
+                      }}
+                    >
+                      Retake Questionnaire
+                    </button>
+                  </div>
+                  <div className="grid gap-3 lg:grid-cols-2">
+                    {QUESTIONS.map((question) => {
+                      const answerKey = profile?.preferences?.[question.id];
+                      const answer = question.options.find((option) => option.value === answerKey);
+                      return (
+                        <div key={question.id} className="rounded-[24px] border border-[var(--border)] bg-[var(--panel-muted)] p-4">
+                          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">Preference</p>
+                          <p className="mt-3 text-base font-medium leading-7 text-[var(--foreground)]">{question.question}</p>
+                          <p className="mt-3 text-sm leading-6 text-[var(--text-secondary)]">{answer?.label ?? "Not answered"}</p>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
             </SectionShell>
@@ -434,8 +818,8 @@ export default function Home() {
 
           {activeTab === "matches" ? (
             <SectionShell
-              eyebrow="Matches"
-              title={!hasCompleteProfile ? "Finish your profile before matching" : !hasCompleteQuestionnaire ? "Answer your preferences to improve match quality" : "Start exploring your roommate shortlist"}
+              eyebrow="Matchmaking"
+              title={!hasCompleteProfile ? "Finish your profile before matching" : !hasCompleteQuestionnaire ? "Answer your preferences to improve match quality" : "Find Your Perfect Roommate"}
               description={!hasCompleteProfile ? "Your basics are the first signal in the scoring model. Add them before generating recommendations." : !hasCompleteQuestionnaire ? "The questionnaire adds the lifestyle layer that makes the shortlist much more useful." : "Generate a ranked list of compatible roommates and open any card to compare details."}
             >
               {!hasCompleteProfile ? (
@@ -477,7 +861,14 @@ export default function Home() {
                             <MatchCard 
                               match={bestMatch} 
                               featured={true} 
-                              onClick={() => setSelectedMatch(bestMatch)} 
+                              onClick={() => setSelectedMatchEmail(bestMatch.email)}
+                              onSendRequest={handleSendRequest}
+                              onAcceptRequest={handleAcceptRequest}
+                              onRejectRequest={handleRejectRequest}
+                              onMessage={(match) => {
+                                setSelectedChatUser(match);
+                                setActiveTab("chat");
+                              }}
                             />
                           </div>
                         </div>
@@ -495,7 +886,18 @@ export default function Home() {
                             .sort((a, b) => b.primaryScore - a.primaryScore)
                             .slice(0, 4)
                             .map((match) => (
-                              <MatchCard key={match.email} match={match} onClick={() => setSelectedMatch(match)} />
+                              <MatchCard 
+                                key={match.email} 
+                                match={match} 
+                                onClick={() => setSelectedMatchEmail(match.email)}
+                                onSendRequest={handleSendRequest}
+                                onAcceptRequest={handleAcceptRequest}
+                                onRejectRequest={handleRejectRequest}
+                                onMessage={(m) => {
+                                  setSelectedChatUser(m);
+                                  setActiveTab("chat");
+                                }}
+                              />
                             ))}
                         </div>
                       </div>
@@ -512,7 +914,18 @@ export default function Home() {
                             .sort((a, b) => b.preferenceScore - a.preferenceScore)
                             .slice(0, 4)
                             .map((match) => (
-                              <MatchCard key={match.email} match={match} onClick={() => setSelectedMatch(match)} />
+                              <MatchCard 
+                                key={match.email} 
+                                match={match} 
+                                onClick={() => setSelectedMatchEmail(match.email)}
+                                onSendRequest={handleSendRequest}
+                                onAcceptRequest={handleAcceptRequest}
+                                onRejectRequest={handleRejectRequest}
+                                onMessage={(m) => {
+                                  setSelectedChatUser(m);
+                                  setActiveTab("chat");
+                                }}
+                              />
                             ))}
                         </div>
                       </div>
@@ -525,13 +938,89 @@ export default function Home() {
             </SectionShell>
           ) : null}
 
-          {selectedMatch && <MatchDetailModal match={selectedMatch} onClose={() => setSelectedMatch(null)} />}
-
-          {error ? (
-            <div className="rounded-[24px] border border-[rgba(255,125,125,0.28)] bg-[rgba(120,25,25,0.38)] px-4 py-3 text-sm text-[rgb(255,215,215)]">
-              {error}
-            </div>
+          {activeTab === "chat" ? (
+            <SectionShell eyebrow="Conversations" title="Your Matches & Chat" description="Manage your accepted matches and coordinate your room setup.">
+              <div className="grid gap-6 lg:grid-cols-12">
+                <div className="lg:col-span-4 space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-4">Accepted Matches</p>
+                  {chatUsers.map(m => (
+                    <button
+                      key={m.email}
+                      onClick={() => setSelectedChatUser(m)}
+                      className={`w-full flex items-center gap-3 p-3 rounded-2xl border transition ${
+                        selectedChatUser?.email === m.email 
+                          ? "border-[var(--brand)] bg-[rgba(240,96,79,0.08)]" 
+                          : "border-[var(--border)] bg-[var(--panel-muted)] hover:border-[var(--border-strong)]"
+                      }`}
+                    >
+                      <div className="h-10 w-10 rounded-full bg-[var(--brand)] flex items-center justify-center text-[var(--text-on-brand)] font-bold">
+                        {m.name?.[0] || "?"}
+                      </div>
+                      <div className="text-left overflow-hidden">
+                        <p className="font-medium text-sm truncate">{m.name}</p>
+                        <p className="text-[10px] text-[var(--text-secondary)] uppercase tracking-wider">Year {m.year} • {m.course}</p>
+                      </div>
+                    </button>
+                  ))}
+                  {chatUsers.length === 0 && (
+                    <div className="flex flex-col items-center justify-center p-8 text-center border border-dashed border-[var(--border)] rounded-3xl bg-[var(--panel-muted)]">
+                      <p className="text-sm text-[var(--text-muted)]">No matches accepted yet.</p>
+                      <button 
+                        className={`mt-4 ${secondaryButtonClass} text-xs`}
+                        onClick={() => setActiveTab("matches")}
+                      >
+                        Explore Matches
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <div className="lg:col-span-8">
+                  {selectedChatUser ? (
+                    <ChatWindow
+                      match={selectedChatUser}
+                      messages={messages}
+                      onSendMessage={handleSendMessage}
+                      currentUserEmail={userEmail}
+                    />
+                  ) : (
+                    <div className="flex h-[400px] flex-col items-center justify-center rounded-3xl border border-dashed border-[var(--border)] bg-[var(--panel-muted)] text-center p-6">
+                      <div className="mb-4 h-12 w-12 rounded-full border border-[var(--border)] bg-[var(--panel)] flex items-center justify-center text-xl">💬</div>
+                      <p className="text-sm font-medium text-[var(--foreground)]">Select a match to start chatting</p>
+                      <p className="mt-1 text-xs text-[var(--text-secondary)]">Only mutual matches can message each other.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </SectionShell>
           ) : null}
+
+          {selectedMatch && (
+            <MatchDetailModal 
+              match={selectedMatch} 
+              onClose={() => setSelectedMatchEmail(null)} 
+              onSendRequest={handleSendRequest}
+              onAcceptRequest={handleAcceptRequest}
+              onRejectRequest={handleRejectRequest}
+              onMessage={(m) => {
+                setSelectedChatUser(m);
+                setActiveTab("chat");
+              }}
+            />
+          )}
+
+          <div className="fixed bottom-8 left-1/2 z-50 flex -translate-x-1/2 flex-col gap-3">
+            {error ? (
+              <div className="min-w-[300px] rounded-[24px] border border-[rgba(255,125,125,0.28)] bg-[rgba(120,25,25,0.85)] px-6 py-4 text-center text-sm font-medium text-[rgb(255,215,215)] shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-bottom-4">
+                {error}
+              </div>
+            ) : null}
+
+            {success ? (
+              <div className="min-w-[300px] rounded-[24px] border border-[rgba(125,255,255,0.28)] bg-[rgba(25,120,25,0.85)] px-6 py-4 text-center text-sm font-medium text-[rgb(215,255,215)] shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-bottom-4">
+                {success}
+              </div>
+            ) : null}
+          </div>
         </div>
       </div>
     </main>

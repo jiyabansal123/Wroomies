@@ -114,11 +114,80 @@ export function MatchCard({
   match,
   featured = false,
   onClick,
+  onSendRequest,
+  onAcceptRequest,
+  onRejectRequest,
+  onMessage,
 }: {
   match: MatchUser;
   featured?: boolean;
   onClick?: () => void;
+  onSendRequest?: (email: string) => void;
+  onAcceptRequest?: (id: string) => void;
+  onRejectRequest?: (id: string) => void;
+  onMessage?: (match: MatchUser) => void;
 }) {
+  const renderActions = () => {
+    if (match.matchStatus === "accepted") {
+      return (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onMessage?.(match);
+          }}
+          className={`w-full mt-4 ${primaryButtonClass}`}
+        >
+          Message
+        </button>
+      );
+    }
+
+    if (match.matchStatus === "pending_sent") {
+      return (
+        <div className="mt-4 w-full rounded-full border border-[var(--border)] bg-[var(--panel-muted)] px-4 py-2 text-center text-sm font-medium text-[var(--text-muted)]">
+          Pending Response
+        </div>
+      );
+    }
+
+    if (match.matchStatus === "pending_received") {
+      return (
+        <div className="mt-4 flex gap-2">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              match.requestId && onAcceptRequest?.(match.requestId);
+            }}
+            className={`flex-1 ${primaryButtonClass}`}
+          >
+            Accept
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              match.requestId && onRejectRequest?.(match.requestId);
+            }}
+            className={`flex-1 ${secondaryButtonClass}`}
+          >
+            Reject
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onSendRequest?.(match.email);
+        }}
+        className={`w-full mt-4 ${secondaryButtonClass} hover:border-[var(--brand)] hover:text-[var(--brand)]`}
+      >
+        Request Match
+      </button>
+    );
+  };
+
   return (
     <div
       onClick={onClick}
@@ -142,6 +211,11 @@ export function MatchCard({
           <div className="rounded-full border border-[var(--brand)]/30 bg-[var(--brand)]/10 px-2.5 py-0.5 text-[10px] font-bold text-[var(--brand-soft)]">
             {match.totalScore}% Fit
           </div>
+          {match.matchStatus === "accepted" && (
+            <div className="rounded-full bg-[rgba(125,255,125,0.1)] border border-[rgba(125,255,125,0.3)] px-2 py-0.5 text-[9px] font-bold text-[rgb(125,255,125)] uppercase tracking-wider">
+              Matched
+            </div>
+          )}
         </div>
       </div>
 
@@ -156,8 +230,26 @@ export function MatchCard({
         </div>
       </div>
 
-      <div className="mt-4 text-[11px] font-semibold text-[var(--foreground)] transition group-hover:text-[var(--brand-soft)]">
-        View full comparison →
+      {match.reasons && match.reasons.length > 0 && (
+        <div className="mt-4 rounded-xl border border-[var(--brand)]/10 bg-[var(--brand)]/5 p-3">
+          <p className="text-[10px] font-bold text-[var(--brand-soft)] uppercase tracking-wider flex items-center gap-1.5">
+            <span>👉</span> Why this match?
+          </p>
+          <ul className="mt-2 space-y-1">
+            {match.reasons.map((reason, idx) => (
+              <li key={idx} className="text-[11px] text-[var(--foreground)] flex items-center gap-2">
+                <span className="h-1 w-1 rounded-full bg-[var(--brand)]" />
+                {reason}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {renderActions()}
+
+      <div className="mt-3 text-[10px] font-medium text-[var(--text-muted)] opacity-0 transition group-hover:opacity-100">
+        Click to view full comparison →
       </div>
     </div>
   );
@@ -168,9 +260,17 @@ import { QUESTIONS } from "./home-data";
 export function MatchDetailModal({
   match,
   onClose,
+  onSendRequest,
+  onAcceptRequest,
+  onRejectRequest,
+  onMessage,
 }: {
   match: MatchUser;
   onClose: () => void;
+  onSendRequest?: (email: string) => void;
+  onAcceptRequest?: (id: string) => void;
+  onRejectRequest?: (id: string) => void;
+  onMessage?: (match: MatchUser) => void;
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
@@ -200,6 +300,43 @@ export function MatchDetailModal({
           <StatCard label="Switching" value={match.is_open_to_switch ? "Ready" : "No"} hint="Flexible on Room" />
         </div>
 
+        <div className="mt-8">
+          {match.matchStatus === "accepted" ? (
+            <button 
+              className={`w-full ${primaryButtonClass}`} 
+              onClick={() => { onMessage?.(match); onClose(); }}
+            >
+              Start Chatting
+            </button>
+          ) : match.matchStatus === "pending_sent" ? (
+            <div className="w-full rounded-2xl border border-[var(--border)] bg-[var(--panel-muted)] py-3 text-center text-sm font-medium text-[var(--text-muted)]">
+              Match Request Pending
+            </div>
+          ) : match.matchStatus === "pending_received" ? (
+            <div className="flex gap-3">
+              <button 
+                className={`flex-1 ${primaryButtonClass}`} 
+                onClick={() => { match.requestId && onAcceptRequest?.(match.requestId); onClose(); }}
+              >
+                Accept Match
+              </button>
+              <button 
+                className={`flex-1 ${secondaryButtonClass}`} 
+                onClick={() => { match.requestId && onRejectRequest?.(match.requestId); onClose(); }}
+              >
+                Reject
+              </button>
+            </div>
+          ) : (
+            <button 
+              className={`w-full ${primaryButtonClass}`} 
+              onClick={() => { onSendRequest?.(match.email); onClose(); }}
+            >
+              Send Match Request
+            </button>
+          )}
+        </div>
+
         <div className="mt-8 space-y-4">
           <h3 className="text-lg font-semibold tracking-[-0.03em]">Questionnaire Answers</h3>
           <div className="grid gap-2">
@@ -215,14 +352,81 @@ export function MatchDetailModal({
             })}
           </div>
         </div>
-
-        <button className={`mt-8 w-full ${primaryButtonClass}`} onClick={onClose}>
-          Close Details
-        </button>
       </div>
     </div>
   );
 }
+
+export function ChatWindow({
+  match,
+  messages,
+  onSendMessage,
+  currentUserEmail,
+}: {
+  match: MatchUser;
+  messages: any[];
+  onSendMessage: (content: string) => void;
+  currentUserEmail: string;
+}) {
+  const [text, setText] = React.useState("");
+
+  return (
+    <div className="flex h-[600px] flex-col rounded-3xl border border-[var(--border)] bg-[var(--panel)] shadow-[var(--card-shadow)]">
+      <div className="flex items-center justify-between border-b border-[var(--border)] p-4">
+        <div>
+          <h3 className="text-lg font-semibold">{match.name}</h3>
+          <p className="text-[10px] text-[var(--text-secondary)] uppercase tracking-wider">Year {match.year} • {match.course.toUpperCase()}</p>
+        </div>
+      </div>
+      
+      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+        {messages.length === 0 ? (
+          <div className="flex h-full flex-col items-center justify-center text-center opacity-40">
+            <p className="text-sm">No messages yet. Say hi!</p>
+          </div>
+        ) : (
+          messages.map((m) => {
+            const isMe = m.sender_email === currentUserEmail;
+            return (
+              <div key={m.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
+                <div className={`max-w-[80%] rounded-2xl px-4 py-2 text-sm ${
+                  isMe 
+                    ? "bg-[var(--brand)] text-[var(--text-on-brand)]" 
+                    : "bg-[var(--panel-muted)] border border-[var(--border)] text-[var(--foreground)]"
+                }`}>
+                  {m.content}
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      <div className="p-4 border-t border-[var(--border)]">
+        <form 
+          className="flex gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (text.trim()) {
+              onSendMessage(text);
+              setText("");
+            }
+          }}
+        >
+          <input
+            className={fieldClass}
+            placeholder="Type your message..."
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+          />
+          <button className={primaryButtonClass} type="submit">Send</button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+import React from "react";
 
 function MiniMeta({ label, value }: { label: string; value: string }) {
   return (
@@ -244,7 +448,7 @@ export function LoadingView({ message }: { message: string }) {
   );
 }
 
-export function AuthView() {
+export function AuthView({ onDemoLogin }: { onDemoLogin: () => void }) {
   return (
     <main className="relative min-h-screen overflow-hidden bg-[var(--background)] text-[var(--foreground)]">
       <div className="pointer-events-none absolute inset-0 opacity-90" aria-hidden="true">
@@ -270,7 +474,13 @@ export function AuthView() {
               >
                 Continue with Bennett email
               </button>
-              <div className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--text-muted)]">
+              <button 
+                className={`${secondaryButtonClass} scale-105 border-[rgba(255,255,255,0.15)] bg-[rgba(255,255,255,0.05)] px-8 py-3`}
+                onClick={onDemoLogin}
+              >
+                Try Demo Experience
+              </button>
+              <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--text-muted)]">
                 Only Bennett accounts can join
               </div>
             </div>
