@@ -1,36 +1,41 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+Wroomies 🏠💬
 
-## Getting Started
+Wroomies is a college-focused roommate matching platform designed to help students find compatible roommates based on lifestyle preferences. Users sign in using their university email, complete a lifestyle questionnaire, and get matched with others who have similar habits and preferences. Once matched, users can connect and chat within the platform.
 
-First, run the development server:
+🚀 Features
+🔐 Secure authentication using Azure Active Directory (university email login)
+🧠 14-question lifestyle questionnaire to understand user preferences
+🤝 Smart roommate matching based on compatibility scoring
+💌 Match acceptance system for mutual connection
+💬 Real-time chat between matched users
+🎯 Clean and simple UI designed for student usability
+🛠️ Tech Stack
+Frontend: Next.js
+Backend / Database: Supabase
+Authentication: Azure Active Directory (Azure AD)
+Real-time features: Supabase Realtime (for chat/matching updates)
+⚙️ How It Works
+Users log in using their university email via Azure AD
+They complete a 14-question lifestyle questionnaire
+The system calculates compatibility scores with other users
+Users receive potential roommate matches
+Both users can accept a match
+Once matched, a chat room is unlocked for communication
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+🧠 Key Logic
+Matching is based on a weighted score system derived from questionnaire responses
+Higher similarity in lifestyle preferences increases match probability
+Matches require mutual acceptance before chat is enabled
+🔐 Authentication
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Wroomies uses Azure Active Directory (Azure AD) to ensure only verified university students can access the platform.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+📌 Future Improvements
+Improve matching algorithm using ML-based recommendations
+Add filters (budget, location, room type)
+Mobile app version
+Group roommate matching (more than 2 users)
+👨‍💻 Author
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Built by JB
+If you like this project or want to collaborate, feel free to connect.
