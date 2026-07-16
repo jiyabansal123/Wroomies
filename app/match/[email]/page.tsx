@@ -10,11 +10,11 @@ import {
   UserProfile, 
   MatchUser, 
   QUESTIONS, 
-  calculateMatch, 
-  calculatePreferenceSimilarity,
+  calculateMatch,
+  calculateExploreMatch,
+  isSameYear,
   formatCourse
 } from "@/app/home-data";
-] as const;
 
 // logic removed, using centralized calculation
 
@@ -53,8 +53,10 @@ export default function MatchPage() {
         .single();
         
         if (myData && targetData) {
-          const result = calculateMatch(myData, targetData);
-          setMatch({ ...targetData, score: result.totalScore, reasons: result.reasons });
+          const result = isSameYear(myData, targetData)
+            ? calculateMatch(myData, targetData)
+            : calculateExploreMatch(myData, targetData);
+          setMatch({ ...targetData, ...result });
         }
       
       setLoading(false);

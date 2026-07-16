@@ -1,7 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { signOut, useSession } from "next-auth/react";
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 
 import { supabase } from "@/lib/supabase";
 
@@ -29,11 +31,16 @@ import {
   getProgressValue,
   MatchRequest,
   MatchStatus,
+  calculateExploreMatch,
+  isSameYear,
+  sortPrimaryShortlist,
 } from "./home-data";
 import { MatchDetailModal, ChatWindow } from "./home-ui";
 
 export default function Home() {
   const { data: session, status } = useSession();
+  const searchParams = useSearchParams();
+  const chatEmail = searchParams.get("chat");
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [year, setYear] = useState("1");
   const [course, setCourse] = useState("btech");
@@ -41,6 +48,7 @@ export default function Home() {
   const [roomNumber, setRoomNumber] = useState("");
   const [isOpenToSwitch, setIsOpenToSwitch] = useState(false);
   const [matches, setMatches] = useState<MatchUser[]>([]);
+  const [exploreMatches, setExploreMatches] = useState<MatchUser[]>([]);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [loadingProfile, setLoadingProfile] = useState(false);
@@ -49,7 +57,6 @@ export default function Home() {
   const [loadingMatches, setLoadingMatches] = useState(false);
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState<TabKey>("matches");
-  const [usePreferences, setUsePreferences] = useState(true);
   const [selectedMatchEmail, setSelectedMatchEmail] = useState<string | null>(null);
   const [matchRequests, setMatchRequests] = useState<MatchRequest[]>([]);
   const [selectedChatUser, setSelectedChatUser] = useState<MatchUser | null>(null);
@@ -59,6 +66,8 @@ export default function Home() {
   const [chatUsers, setChatUsers] = useState<MatchUser[]>([]);
   const [isRetaking, setIsRetaking] = useState(false);
   const [isDemoMode, setIsDemoMode] = useState(false);
+  const [aiResults, setAiResults] = useState<Record<string, { compatibilityScore: number; reason: string; strengths?: string[]; potentialConflicts?: string[]; summary?: string }>>({});
+  const [analyzingEmails, setAnalyzingEmails] = useState<Record<string, boolean>>({});
 
   const userEmail = isDemoMode ? "demo@wroomies.com" : (session?.user?.email ?? "");
   const demoUser = { email: "demo@wroomies.com", name: "Demo Student" };
@@ -96,9 +105,9 @@ export default function Home() {
       // Find match status. Prioritize 'accepted' if multiple exist.
       const relevantRequests = matchRequests.filter(
         r => (r.sender_email === userEmail && r.receiver_email === m.email) ||
-             (r.receiver_email === userEmail && r.sender_email === m.email)
+          (r.receiver_email === userEmail && r.sender_email === m.email)
       );
-      
+
       const request = relevantRequests.find(r => r.status === "accepted") || relevantRequests[0];
 
       let matchStatus: MatchStatus = "none";
@@ -111,12 +120,13 @@ export default function Home() {
 
       return {
         ...m,
-        totalScore: usePreferences ? m.totalScore : m.primaryScore,
+        totalScore: m.totalScore,
+        score: m.totalScore,
         matchStatus,
         requestId: request?.id
       };
-    });
-  }, [matches, matchRequests, usePreferences, userEmail]);
+    }).sort((a, b) => b.totalScore - a.totalScore || b.primaryScore - a.primaryScore);
+  }, [matches, matchRequests, userEmail]);
 
   const totalMatchesFound = processedMatches.length;
   const bestMatch = useMemo(() => {
@@ -199,7 +209,7 @@ export default function Home() {
           { id: "demo-req-1", sender_email: "jb@demo.com", receiver_email: userEmail, status: "accepted", created_at: new Date().toISOString() }
         ];
         setMatchRequests(mockRequests);
-        
+
         // Fetch mock profiles
         const mockJB = {
           email: "jb@demo.com",
@@ -231,7 +241,7 @@ export default function Home() {
 
       if (!error && data) {
         setMatchRequests(data);
-        
+
         // Fetch profiles for accepted matches
         const acceptedEmails = data
           .filter(r => r.status === 'accepted')
@@ -242,10 +252,10 @@ export default function Home() {
             .from("users")
             .select("email, name, year, course, gender, preferences, room_number, is_open_to_switch")
             .in("email", acceptedEmails);
-          
+
           if (userData) {
             const mapped = userData.map(u => {
-              const req = data.find(r => 
+              const req = data.find(r =>
                 (r.sender_email === userEmail && r.receiver_email === u.email) ||
                 (r.receiver_email === userEmail && r.sender_email === u.email)
               );
@@ -304,6 +314,16 @@ export default function Home() {
   }, [userEmail]);
 
   useEffect(() => {
+    if (chatEmail && chatUsers.length > 0) {
+      const chatUser = chatUsers.find(u => u.email === chatEmail);
+      if (chatUser) {
+        setSelectedChatUser(chatUser);
+        setActiveTab("chat");
+      }
+    }
+  }, [chatEmail, chatUsers]);
+
+  useEffect(() => {
     if (!selectedChatUser || !userEmail) {
       setMessages([]);
       return;
@@ -342,20 +362,20 @@ export default function Home() {
         { event: "INSERT", schema: "public", table: "messages" },
         (payload) => {
           const newMessage = payload.new;
-          const isRelevant = 
+          const isRelevant =
             (newMessage.sender_email === userEmail && newMessage.receiver_email === selectedChatUser.email) ||
             (newMessage.sender_email === selectedChatUser.email && newMessage.receiver_email === userEmail);
-          
+
           if (isRelevant) {
             setMessages((prev) => {
               // Check if message already exists (to avoid duplicates from optimistic updates)
               if (prev.some(m => m.id === newMessage.id)) return prev;
-              
+
               // Remove the optimistic placeholder which has a matching content and sender
-              const filtered = prev.filter(m => 
+              const filtered = prev.filter(m =>
                 !(m.id.startsWith('temp-') && m.sender_email === newMessage.sender_email && m.content === newMessage.content)
               );
-              
+
               return [...filtered, newMessage];
             });
           }
@@ -439,7 +459,7 @@ export default function Home() {
 
     try {
       let allUsers: UserProfile[] = [];
-      
+
       if (isDemoMode) {
         allUsers = [
           { email: "alex@demo.com", name: "Alex - Demo User", year: "2", course: "btech", gender: "male", room_number: "C-101", is_open_to_switch: true, preferences: { cleanliness: "high", sleep: "early" } },
@@ -462,24 +482,106 @@ export default function Home() {
         (u) => u.gender === profile.gender && u.email !== profile.email,
       );
 
-      const scored = sameGender.map((candidate) => {
-        const result = calculateMatch(profile, candidate);
-        return {
-          ...candidate,
-          primaryScore: result.primaryScore,
-          preferenceScore: result.preferenceScore,
-          totalScore: result.totalScore,
-          score: result.score,
-          reasons: result.reasons,
-        };
-      });
+      const primaryScored: MatchUser[] = [];
+      const exploreScored: MatchUser[] = [];
 
-      setMatches(scored);
+      for (const candidate of sameGender) {
+        if (isSameYear(profile, candidate)) {
+          const result = calculateMatch(profile, candidate);
+          if (result.primaryScore > 0) {
+            primaryScored.push({
+              ...candidate,
+              primaryScore: result.primaryScore,
+              preferenceScore: result.preferenceScore,
+              totalScore: result.totalScore,
+              score: result.score,
+              reasons: result.reasons,
+            });
+          }
+        } else {
+          const result = calculateExploreMatch(profile, candidate);
+          if (result.totalScore > 0) {
+            exploreScored.push({
+              ...candidate,
+              primaryScore: result.primaryScore,
+              preferenceScore: result.preferenceScore,
+              totalScore: result.totalScore,
+              score: result.score,
+              reasons: result.reasons,
+            });
+          }
+        }
+      }
+
+      setMatches(sortPrimaryShortlist(primaryScored));
+      setExploreMatches(exploreScored);
     } catch (matchFailure) {
       console.error("Match fetch failed:", matchFailure);
       setError("Unexpected error while finding matches.");
     } finally {
       setLoadingMatches(false);
+    }
+  };
+
+  const handleAnalyzeLifestyle = async (email: string) => {
+    setAnalyzingEmails((prev) => ({ ...prev, [email]: true }));
+    setError("");
+    try {
+      if (isDemoMode) {
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        setAiResults((prev) => ({
+          ...prev,
+          [email]: {
+            compatibilityScore: 94,
+            reason: "Both prefer quiet evening study sessions and keep their personal areas clean.",
+            strengths: ["Similar sleep schedules", "Shared cleanliness standards", "Compatible study habits"],
+            potentialConflicts: ["Different guest preferences may need discussion"],
+            summary: "Strong lifestyle compatibility with minor areas to discuss before moving in together."
+          },
+        }));
+        return;
+      }
+
+      // Get current user and candidate user IDs
+      const currentUser = await supabase.from("users").select("id").eq("email", userEmail).single();
+      const candidateUser = await supabase.from("users").select("id").eq("email", email).single();
+
+      if (!currentUser.data?.id || !candidateUser.data?.id) {
+        throw new Error("Could not find user IDs for lifestyle analysis.");
+      }
+
+      const response = await fetch("/api/lifestyle-match", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          currentUserId: currentUser.data.id,
+          candidateUserId: candidateUser.data.id,
+        }),
+      });
+
+      if (!response.ok) {
+        const errDetails = await response.json().catch(() => null);
+        throw new Error(errDetails?.error || "Failed to analyze lifestyle compatibility.");
+      }
+
+      const data = await response.json();
+      setAiResults((prev) => ({
+        ...prev,
+        [email]: {
+          compatibilityScore: data.compatibilityScore,
+          reason: data.summary,
+          strengths: data.strengths,
+          potentialConflicts: data.potentialConflicts,
+          summary: data.summary,
+        },
+      }));
+    } catch (err: any) {
+      console.error("AI Lifestyle Match Analysis error:", err);
+      setError(err?.message || "An unexpected error occurred during AI analysis.");
+    } finally {
+      setAnalyzingEmails((prev) => ({ ...prev, [email]: false }));
     }
   };
 
@@ -496,7 +598,7 @@ export default function Home() {
         receiver_email: receiverEmail,
         status: "pending"
       });
-    
+
     if (error) {
       setError(error.message);
     } else {
@@ -510,7 +612,7 @@ export default function Home() {
       .from("match_requests")
       .update({ status: "accepted" })
       .eq("id", id);
-    
+
     if (error) {
       setError(error.message);
     } else {
@@ -524,7 +626,7 @@ export default function Home() {
       .from("match_requests")
       .update({ status: "rejected" })
       .eq("id", id);
-    
+
     if (error) {
       setError(error.message);
     } else {
@@ -536,12 +638,12 @@ export default function Home() {
   const handleSendMessage = async (content: string) => {
     if (!selectedChatUser) return;
 
-    const optimisticMessage = { 
-      id: `temp-${Date.now()}`, 
-      sender_email: userEmail, 
-      receiver_email: selectedChatUser.email, 
-      content, 
-      created_at: new Date().toISOString() 
+    const optimisticMessage = {
+      id: `temp-${Date.now()}`,
+      sender_email: userEmail,
+      receiver_email: selectedChatUser.email,
+      content,
+      created_at: new Date().toISOString()
     };
 
     // Optimistic Update: Show message immediately
@@ -641,10 +743,6 @@ export default function Home() {
               <p className="mt-2 text-4xl font-semibold tracking-[-0.06em] text-[var(--foreground)]">{readinessPercent}%</p>
               <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-[rgba(255,255,255,0.07)]">
                 <div className="h-full rounded-full bg-[linear-gradient(90deg,var(--brand),var(--brand-soft))]" style={{ width: `${readinessPercent}%` }} />
-              </div>
-              <div className="mt-5 flex flex-col gap-2">
-                <ProgressPill label="Profile" value={profileCompletionPercent} />
-                <ProgressPill label="Preferences" value={preferencesCompletionPercent} />
               </div>
             </div>
           </div>
@@ -787,8 +885,8 @@ export default function Home() {
               ) : (
                 <div className="space-y-6">
                   <div className="flex items-center justify-between">
-                    <p className="text-sm font-medium text-[var(--text-secondary)]">You've completed the questionnaire. Re-taking it will overwrite your current preferences.</p>
-                    <button 
+                    <p className="text-sm font-medium text-[var(--text-secondary)]">You've completed the questionnaire. Re-taking it will change your current preferences.</p>
+                    <button
                       className={primaryButtonClass}
                       onClick={() => {
                         setIsRetaking(true);
@@ -819,120 +917,74 @@ export default function Home() {
           {activeTab === "matches" ? (
             <SectionShell
               eyebrow="Matchmaking"
-              title={!hasCompleteProfile ? "Finish your profile before matching" : !hasCompleteQuestionnaire ? "Answer your preferences to improve match quality" : "Find Your Perfect Roommate"}
-              description={!hasCompleteProfile ? "Your basics are the first signal in the scoring model. Add them before generating recommendations." : !hasCompleteQuestionnaire ? "The questionnaire adds the lifestyle layer that makes the shortlist much more useful." : "Generate a ranked list of compatible roommates and open any card to compare details."}
+              title={!hasCompleteProfile ? "Finish your profile before matching" : "Find Your Perfect Roommate"}
+              description={!hasCompleteProfile ? "Your basics are the first signal in the scoring model. Add them before generating recommendations." : !hasCompleteQuestionnaire ? "Generate a top 10 shortlist from same-gender, same-year students first. Preferences can refine it whenever you want." : "Generate a ranked list of compatible roommates and open any card to compare details."}
             >
               {!hasCompleteProfile ? (
                 <EmptyState title="Profile setup is still incomplete." description="Add your year, course, gender, and room details so the dashboard can generate better roommate candidates." actionLabel="Complete profile" onClick={() => setActiveTab("profile")} />
-              ) : !hasCompleteQuestionnaire ? (
-                <EmptyState title="Preferences are the missing layer." description={`Answer all ${QUESTIONS.length} preference prompts to get stronger compatibility scoring.`} actionLabel="Continue questionnaire" onClick={() => setActiveTab("preferences")} />
               ) : (
                 <div className="space-y-12">
-                  <div className="flex flex-wrap items-center justify-between gap-6 rounded-[32px] border border-[var(--border)] bg-[var(--panel-muted)] p-6">
-                    <div className="flex flex-wrap gap-3">
-                      <ProgressPill label="Profile" value={profileCompletionPercent} />
-                      <ProgressPill label="Preferences" value={preferencesCompletionPercent} />
-                    </div>
-                    <div className="flex items-center gap-6">
-                      <label className="flex cursor-pointer items-center gap-3">
-                        <div className="relative h-6 w-11 rounded-full bg-[rgba(255,255,255,0.1)] transition duration-200">
-                          <input type="checkbox" checked={usePreferences} onChange={(e) => setUsePreferences(e.target.checked)} className="peer sr-only" />
-                          <div className="absolute left-1 top-1 h-4 w-4 rounded-full bg-white transition duration-200 peer-checked:translate-x-5 peer-checked:bg-[var(--brand)]" />
-                        </div>
-                        <span className="text-sm font-medium text-[var(--foreground)]">Preferences Mode</span>
-                      </label>
-                      <button className={primaryButtonClass} onClick={findMatches} disabled={loadingMatches}>
-                        {loadingMatches ? "Finding matches..." : "Generate shortlist"}
+                  <div className="flex items-center gap-6">
+                    {!hasCompleteQuestionnaire ? (
+                      <button type="button" className={secondaryButtonClass} onClick={() => setActiveTab("preferences")}>
+                        Add questionnaire
                       </button>
-                    </div>
+                    ) : null}
+                    <button className={primaryButtonClass} onClick={findMatches} disabled={loadingMatches}>
+                      {loadingMatches ? "Finding matches..." : "Search"}
+                    </button>
                   </div>
 
                   {processedMatches.length > 0 ? (
-                    <>
-                      {bestMatch && (
-                        <div className="mb-8 space-y-5">
-                          <div className="flex items-center gap-3">
-                            <h3 className="flex items-center gap-2 text-lg font-semibold tracking-tight">
-                              <span className="text-xl">🏆</span> Overall Best Fit
-                            </h3>
-                            <div className="h-px flex-1 bg-[var(--border)]" />
-                          </div>
-                          <div className="max-w-2xl mx-auto">
-                            <MatchCard 
-                              match={bestMatch} 
-                              featured={true} 
-                              onClick={() => setSelectedMatchEmail(bestMatch.email)}
-                              onSendRequest={handleSendRequest}
-                              onAcceptRequest={handleAcceptRequest}
-                              onRejectRequest={handleRejectRequest}
-                              onMessage={(match) => {
-                                setSelectedChatUser(match);
-                                setActiveTab("chat");
-                              }}
-                            />
-                          </div>
-                        </div>
-                      )}
-
-                      <div className="space-y-5">
-                        <div className="flex items-center gap-3">
-                          <h3 className="flex items-center gap-2 text-lg font-semibold tracking-tight">
-                            <span className="text-xl">🎯</span> Best Structural Matches
-                          </h3>
-                          <div className="h-px flex-1 bg-[var(--border)]" />
-                        </div>
-                        <div className="grid gap-3 xl:grid-cols-2">
-                          {[...processedMatches]
-                            .sort((a, b) => b.primaryScore - a.primaryScore)
-                            .slice(0, 4)
-                            .map((match) => (
-                              <MatchCard 
-                                key={match.email} 
-                                match={match} 
-                                onClick={() => setSelectedMatchEmail(match.email)}
-                                onSendRequest={handleSendRequest}
-                                onAcceptRequest={handleAcceptRequest}
-                                onRejectRequest={handleRejectRequest}
-                                onMessage={(m) => {
-                                  setSelectedChatUser(m);
-                                  setActiveTab("chat");
-                                }}
-                              />
-                            ))}
-                        </div>
+                    <div className="space-y-5">
+                      <div className="flex items-center gap-3">
+                        <h3 className="text-lg font-semibold tracking-tight">Top 10 Matches</h3>
+                        <div className="h-px flex-1 bg-[var(--border)]" />
                       </div>
-
-                      <div className="space-y-5">
-                        <div className="flex items-center gap-3">
-                          <h3 className="flex items-center gap-2 text-lg font-semibold tracking-tight">
-                            <span className="text-xl">🧠</span> Best Lifestyle Matches
-                          </h3>
-                          <div className="h-px flex-1 bg-[var(--border)]" />
-                        </div>
-                        <div className="grid gap-3 xl:grid-cols-2">
-                          {[...processedMatches]
-                            .sort((a, b) => b.preferenceScore - a.preferenceScore)
-                            .slice(0, 4)
-                            .map((match) => (
-                              <MatchCard 
-                                key={match.email} 
-                                match={match} 
-                                onClick={() => setSelectedMatchEmail(match.email)}
-                                onSendRequest={handleSendRequest}
-                                onAcceptRequest={handleAcceptRequest}
-                                onRejectRequest={handleRejectRequest}
-                                onMessage={(m) => {
-                                  setSelectedChatUser(m);
-                                  setActiveTab("chat");
-                                }}
-                              />
-                            ))}
-                        </div>
+                      <div className="grid gap-3 xl:grid-cols-2">
+                        {processedMatches.map((match, index) => (
+                          <MatchCard
+                            key={match.email}
+                            match={match}
+                            featured={index === 0}
+                            currentUser={profile}
+                            onClick={() => setSelectedMatchEmail(match.email)}
+                            onSendRequest={handleSendRequest}
+                            onAcceptRequest={handleAcceptRequest}
+                            onRejectRequest={handleRejectRequest}
+                            onAnalyzeLifestyle={handleAnalyzeLifestyle}
+                            aiScore={aiResults[match.email]?.compatibilityScore}
+                            aiReason={aiResults[match.email]?.reason}
+                            aiStrengths={aiResults[match.email]?.strengths}
+                            aiPotentialConflicts={aiResults[match.email]?.potentialConflicts}
+                            isAnalyzing={analyzingEmails[match.email]}
+                            onMessage={(m) => {
+                              setSelectedChatUser(m);
+                              setActiveTab("chat");
+                            }}
+                          />
+                        ))}
                       </div>
-                    </>
+                    </div>
                   ) : (
                     <EmptyState title="No shortlist yet." description="Generate your first ranked results to see the best roommate candidates here." />
                   )}
+
+                  <div className="flex flex-col items-center gap-4 rounded-[32px] border border-dashed border-[var(--border-strong)] bg-[var(--panel-muted)] p-8 text-center">
+                    <div>
+                      <p className="text-lg font-semibold text-[var(--foreground)]">
+                        Looking beyond your year?
+                      </p>
+                      <p className="mt-2 max-w-md text-sm leading-6 text-[var(--text-secondary)]">
+                        {exploreMatches.length > 0
+                          ? `${exploreMatches.length} student${exploreMatches.length === 1 ? "" : "s"} from other years share compatible lifestyles with you.`
+                          : "Browse students from other academic years who may still be a lifestyle fit."}
+                      </p>
+                    </div>
+                    <Link href="/explore" className={secondaryButtonClass}>
+                      Explore more...
+                    </Link>
+                  </div>
                 </div>
               )}
             </SectionShell>
@@ -947,11 +999,10 @@ export default function Home() {
                     <button
                       key={m.email}
                       onClick={() => setSelectedChatUser(m)}
-                      className={`w-full flex items-center gap-3 p-3 rounded-2xl border transition ${
-                        selectedChatUser?.email === m.email 
-                          ? "border-[var(--brand)] bg-[rgba(240,96,79,0.08)]" 
+                      className={`w-full flex items-center gap-3 p-3 rounded-2xl border transition ${selectedChatUser?.email === m.email
+                          ? "border-[var(--brand)] bg-[rgba(240,96,79,0.08)]"
                           : "border-[var(--border)] bg-[var(--panel-muted)] hover:border-[var(--border-strong)]"
-                      }`}
+                        }`}
                     >
                       <div className="h-10 w-10 rounded-full bg-[var(--brand)] flex items-center justify-center text-[var(--text-on-brand)] font-bold">
                         {m.name?.[0] || "?"}
@@ -965,7 +1016,7 @@ export default function Home() {
                   {chatUsers.length === 0 && (
                     <div className="flex flex-col items-center justify-center p-8 text-center border border-dashed border-[var(--border)] rounded-3xl bg-[var(--panel-muted)]">
                       <p className="text-sm text-[var(--text-muted)]">No matches accepted yet.</p>
-                      <button 
+                      <button
                         className={`mt-4 ${secondaryButtonClass} text-xs`}
                         onClick={() => setActiveTab("matches")}
                       >
@@ -995,9 +1046,9 @@ export default function Home() {
           ) : null}
 
           {selectedMatch && (
-            <MatchDetailModal 
-              match={selectedMatch} 
-              onClose={() => setSelectedMatchEmail(null)} 
+            <MatchDetailModal
+              match={selectedMatch}
+              onClose={() => setSelectedMatchEmail(null)}
               onSendRequest={handleSendRequest}
               onAcceptRequest={handleAcceptRequest}
               onRejectRequest={handleRejectRequest}

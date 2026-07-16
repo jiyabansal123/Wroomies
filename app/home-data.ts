@@ -180,6 +180,7 @@ export const QUESTIONS = [
 
 const PRIMARY_WEIGHT = 0.6;
 const PREFERENCES_WEIGHT = 0.4;
+const PRIMARY_ONLY_LIMIT = 10;
 
 export function courseGroup(course: string) {
   return course === "btech" || course === "bca" ? "tech" : "other";
@@ -311,12 +312,8 @@ function getAcademicYearScore(yearA: string | null, yearB: string | null) {
   const yA = parseInt(yearA);
   const yB = parseInt(yearB);
   if (isNaN(yA) || isNaN(yB)) return 0;
-  
-  const diff = Math.abs(yA - yB);
-  if (diff === 0) return 100;
-  if (diff === 1) return 70;
-  if (diff === 2) return 50;
-  return 0;
+
+  return yA === yB ? 100 : 0;
 }
 
 function getAcademicCourseScore(courseA: string | null, courseB: string | null) {
@@ -377,35 +374,144 @@ export function calculatePreferenceSimilarity(
   return Math.max(0, Math.min(100, Math.round(score)));
 }
 
+export function hasComparablePreferences(
+  preferencesA: Record<string, string> | null,
+  preferencesB: Record<string, string> | null,
+) {
+  if (!preferencesA || !preferencesB) return false;
+
+  return QUESTIONS.some((question) => Boolean(preferencesA[question.id] && preferencesB[question.id]));
+}
+
+export function sortPrimaryShortlist(matches: MatchUser[]) {
+  return [...matches]
+    .sort((a, b) => {
+      if (b.primaryScore !== a.primaryScore) return b.primaryScore - a.primaryScore;
+      if (b.preferenceScore !== a.preferenceScore) return b.preferenceScore - a.preferenceScore;
+      return (a.name ?? a.email).localeCompare(b.name ?? b.email);
+    })
+    .slice(0, PRIMARY_ONLY_LIMIT);
+}
+
+export function isSameYear(userA: UserProfile, userB: UserProfile) {
+  if (!userA.year || !userB.year) return false;
+  return String(userA.year) === String(userB.year);
+}
+
+function getExploreYearProximityScore(yearA: string | null, yearB: string | null) {
+  if (!yearA || !yearB) return 0;
+  const yA = parseInt(yearA);
+  const yB = parseInt(yearB);
+  if (isNaN(yA) || isNaN(yB)) return 0;
+
+  const diff = Math.abs(yA - yB);
+  if (diff === 1) return 70;
+  if (diff === 2) return 50;
+  return 30;
+}
+
+function collectLifestyleReasons(
+  userA: UserProfile,
+  userB: UserProfile,
+  reasons: string[],
+) {
+  if (!userA.preferences || !userB.preferences) return;
+
+  if (userA.preferences.cleanliness === userB.preferences.cleanliness) {
+    reasons.push("Similar cleanliness standards");
+  }
+  if (userA.preferences.sleep === userB.preferences.sleep) {
+    reasons.push("Compatible sleep schedules");
+  }
+  if (userA.preferences.noise === userB.preferences.noise) {
+    reasons.push("Same noise level preference");
+  }
+  if (userA.preferences.guests === userB.preferences.guests) {
+    reasons.push("Aligned on guest expectations");
+  }
+}
+
+export function calculateExploreMatch(userA: UserProfile, userB: UserProfile) {
+  if (userA.gender !== userB.gender) {
+    return { primaryScore: 0, preferenceScore: 0, totalScore: 0, score: 0, reasons: [] };
+  }
+
+  if (isSameYear(userA, userB)) {
+    return { primaryScore: 0, preferenceScore: 0, totalScore: 0, score: 0, reasons: [] };
+  }
+
+  const yrA = parseInt(userA.year || "0");
+  const yrB = parseInt(userB.year || "0");
+  const yearDiff = Math.abs(yrA - yrB);
+  const reasons: string[] = [];
+
+  if (yearDiff === 1) reasons.push("One year apart");
+  else reasons.push(`${yearDiff} years apart`);
+
+  const yearProximityScore = getExploreYearProximityScore(userA.year, userB.year);
+  const courseScore = getAcademicCourseScore(userA.course, userB.course);
+  if (courseScore === 100) reasons.push(`Both in ${userA.course?.toUpperCase()}`);
+
+  const shouldUsePreferences = hasComparablePreferences(userA.preferences, userB.preferences);
+  const preferenceScore = shouldUsePreferences
+    ? Math.round(calculatePreferenceSimilarity(
+        userA.preferences,
+        userB.preferences,
+      ))
+    : 0;
+
+  collectLifestyleReasons(userA, userB, reasons);
+
+  const primaryScore = Math.round(yearProximityScore * 0.7 + courseScore * 0.3);
+  const totalScore = Math.round(primaryScore * 0.3 + preferenceScore * 0.7);
+
+  return {
+    primaryScore,
+    preferenceScore,
+    totalScore,
+    score: totalScore,
+    reasons: reasons.slice(0, 3),
+  };
+}
+
 export function calculateMatch(userA: UserProfile, userB: UserProfile) {
   // 0. Gender Match (Mandatory fallback)
   if (userA.gender !== userB.gender) return { primaryScore: 0, preferenceScore: 0, totalScore: 0, score: 0, reasons: [] };
+
+  // 0b. Academic Primary Filters (Mandatory)
+  const yrA = parseInt(userA.year || "0");
+  const yrB = parseInt(userB.year || "0");
+  const yearDiff = Math.abs(yrA - yrB);
+  
+  // Only same-year students are eligible for matching
+  if (yearDiff !== 0) {
+    return { primaryScore: 0, preferenceScore: 0, totalScore: 0, score: 0, reasons: ["Different academic year"] };
+  }
 
   const reasons: string[] = [];
 
   // Primary Score logic
   const yearScore = getAcademicYearScore(userA.year, userB.year);
   if (yearScore === 100) reasons.push("Same year of study");
-  else if (yearScore >= 70) reasons.push("Close academic seniority");
 
   const courseScore = getAcademicCourseScore(userA.course, userB.course);
   if (courseScore === 100) reasons.push(`Both in ${userA.course?.toUpperCase()}`);
 
-  const preferenceScore = Math.round(calculatePreferenceSimilarity(
-    userA.preferences,
-    userB.preferences,
-  ));
+  const shouldUsePreferences = hasComparablePreferences(userA.preferences, userB.preferences);
+  const preferenceScore = shouldUsePreferences
+    ? Math.round(calculatePreferenceSimilarity(
+        userA.preferences,
+        userB.preferences,
+      ))
+    : 0;
 
   // Lifestyle reasons
-  if (userA.preferences && userB.preferences) {
-    if (userA.preferences.cleanliness === userB.preferences.cleanliness) reasons.push("Similar cleanliness standards");
-    if (userA.preferences.sleep === userB.preferences.sleep) reasons.push("Compatible sleep schedules");
-    if (userA.preferences.noise === userB.preferences.noise) reasons.push("Same noise level preference");
-    if (userA.preferences.guests === userB.preferences.guests) reasons.push("Aligned on guest expectations");
-  }
+  collectLifestyleReasons(userA, userB, reasons);
 
-  const primaryScore = (yearScore + courseScore) / 2;
-  const totalScore = Math.round(primaryScore * 0.7 + preferenceScore * 0.3);
+  const primaryScore = Math.round(yearScore * 0.7 + courseScore * 0.3);
+  const totalScore = shouldUsePreferences
+    ? Math.round(primaryScore * PRIMARY_WEIGHT + preferenceScore * PREFERENCES_WEIGHT)
+    : primaryScore;
 
   return {
     primaryScore,

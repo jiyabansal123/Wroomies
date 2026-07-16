@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { signIn } from "next-auth/react";
 
-import { MatchUser, formatCourse } from "./home-data";
+import { MatchUser, formatCourse, UserProfile } from "./home-data";
 
 export const primaryButtonClass =
   "inline-flex items-center justify-center rounded-full bg-[var(--brand)] px-4 py-2 text-sm font-semibold text-[var(--text-on-brand)] shadow-[0_12px_30px_rgba(240,96,79,0.24)] transition hover:-translate-y-0.5 hover:bg-[var(--brand-strong)] focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/50 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0";
@@ -113,19 +113,33 @@ export function TabButton({
 export function MatchCard({
   match,
   featured = false,
+  currentUser,
   onClick,
   onSendRequest,
   onAcceptRequest,
   onRejectRequest,
   onMessage,
+  onAnalyzeLifestyle,
+  aiScore,
+  aiReason,
+  aiStrengths,
+  aiPotentialConflicts,
+  isAnalyzing = false,
 }: {
   match: MatchUser;
   featured?: boolean;
+  currentUser?: UserProfile | null;
   onClick?: () => void;
   onSendRequest?: (email: string) => void;
   onAcceptRequest?: (id: string) => void;
   onRejectRequest?: (id: string) => void;
   onMessage?: (match: MatchUser) => void;
+  onAnalyzeLifestyle?: (email: string) => void;
+  aiScore?: number;
+  aiReason?: string;
+  aiStrengths?: string[];
+  aiPotentialConflicts?: string[];
+  isAnalyzing?: boolean;
 }) {
   const renderActions = () => {
     if (match.matchStatus === "accepted") {
@@ -188,6 +202,10 @@ export function MatchCard({
     );
   };
 
+  const hasSameYear = currentUser && match.year && String(currentUser.year) === String(match.year);
+  const hasSameCourse = currentUser && match.course && currentUser.course?.toString().toLowerCase().trim() === match.course?.toString().toLowerCase().trim();
+  const hasSameGender = currentUser && match.gender && currentUser.gender?.toString().toLowerCase().trim() === match.gender?.toString().toLowerCase().trim();
+
   return (
     <div
       onClick={onClick}
@@ -197,19 +215,19 @@ export function MatchCard({
           : "border-[var(--border)] bg-[var(--panel-muted)] shadow-[var(--card-shadow)] hover:border-[var(--border-strong)]"
       }`}
     >
+      {/* Header */}
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-[9px] font-semibold uppercase tracking-[0.2em] text-[var(--text-muted)]">
-            {featured ? "Best Match" : "Recommended"}
+            Recommended Student
           </p>
           <h3 className="mt-1.5 text-lg font-semibold tracking-[-0.03em] text-[var(--foreground)]">
             {match.name ?? "Unknown student"}
           </h3>
-          <p className="mt-0.5 text-[11px] text-[var(--text-secondary)]">{match.email}</p>
         </div>
         <div className="flex flex-col items-end gap-1">
-          <div className="rounded-full border border-[var(--brand)]/30 bg-[var(--brand)]/10 px-2.5 py-0.5 text-[10px] font-bold text-[var(--brand-soft)]">
-            {match.totalScore}% Fit
+          <div className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-bold text-emerald-400">
+            Academic Match
           </div>
           {match.matchStatus === "accepted" && (
             <div className="rounded-full bg-[rgba(125,255,125,0.1)] border border-[rgba(125,255,125,0.3)] px-2 py-0.5 text-[9px] font-bold text-[rgb(125,255,125)] uppercase tracking-wider">
@@ -219,32 +237,131 @@ export function MatchCard({
         </div>
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-2">
-        <div className="rounded-lg border border-[var(--border)] bg-[rgba(255,255,255,0.02)] p-2.5">
-          <p className="text-[8px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Year/Course</p>
-          <p className="mt-0.5 text-base font-bold text-[var(--foreground)]">{match.primaryScore}%</p>
+      {/* Middle */}
+      <div className="mt-3 grid grid-cols-3 gap-2 border-t border-[var(--border)]/40 pt-3">
+        <div className="rounded-lg bg-[var(--panel-muted)] p-2">
+          <p className="text-[8px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Year</p>
+          <p className="mt-0.5 text-xs font-semibold text-[var(--foreground)]">
+            {match.year ? `Year ${match.year}` : "N/A"}
+          </p>
         </div>
-        <div className="rounded-lg border border-[var(--border)] bg-[rgba(255,255,255,0.02)] p-2.5">
-          <p className="text-[8px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Lifestyle</p>
-          <p className="mt-0.5 text-base font-bold text-[var(--foreground)]">{match.preferenceScore}%</p>
+        <div className="rounded-lg bg-[var(--panel-muted)] p-2">
+          <p className="text-[8px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Course</p>
+          <p className="mt-0.5 text-xs font-semibold text-[var(--foreground)] truncate">
+            {formatCourse(match.course)}
+          </p>
         </div>
+        {match.room_number ? (
+          <div className="rounded-lg bg-[var(--panel-muted)] p-2">
+            <p className="text-[8px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Room</p>
+            <p className="mt-0.5 text-xs font-semibold text-[var(--foreground)] truncate">
+              {match.room_number}
+            </p>
+          </div>
+        ) : (
+          <div className="rounded-lg bg-[var(--panel-muted)] p-2 opacity-50">
+            <p className="text-[8px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Room</p>
+            <p className="mt-0.5 text-xs font-semibold text-[var(--foreground)]">N/A</p>
+          </div>
+        )}
       </div>
 
-      {match.reasons && match.reasons.length > 0 && (
-        <div className="mt-4 rounded-xl border border-[var(--brand)]/10 bg-[var(--brand)]/5 p-3">
-          <p className="text-[10px] font-bold text-[var(--brand-soft)] uppercase tracking-wider flex items-center gap-1.5">
-            <span>👉</span> Why this match?
-          </p>
-          <ul className="mt-2 space-y-1">
-            {match.reasons.map((reason, idx) => (
-              <li key={idx} className="text-[11px] text-[var(--foreground)] flex items-center gap-2">
-                <span className="h-1 w-1 rounded-full bg-[var(--brand)]" />
-                {reason}
-              </li>
-            ))}
-          </ul>
+      {/* Why they appeared in results */}
+      <div className="mt-4 flex flex-wrap gap-1.5">
+        {(hasSameYear || (!currentUser && !featured)) && (
+          <span className="inline-flex items-center gap-1 rounded-[6px] bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 text-[10px] text-emerald-400 font-medium">
+            ✓ Same Year
+          </span>
+        )}
+        {(hasSameCourse || (!currentUser && match.course)) && (
+          <span className="inline-flex items-center gap-1 rounded-[6px] bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 text-[10px] text-emerald-400 font-medium">
+            ✓ Same Course
+          </span>
+        )}
+        {(hasSameGender || (!currentUser && match.gender)) && (
+          <span className="inline-flex items-center gap-1 rounded-[6px] bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 text-[10px] text-emerald-400 font-medium">
+            ✓ Same Gender
+          </span>
+        )}
+        {match.is_open_to_switch && (
+          <span className="inline-flex items-center gap-1 rounded-[6px] bg-sky-500/10 border border-sky-500/20 px-2 py-0.5 text-[10px] text-sky-400 font-medium">
+            ⇄ Open to Switch
+          </span>
+        )}
+      </div>
+
+      {/* AI Lifestyle Compatibility analysis section */}
+      {!aiScore && !isAnalyzing ? (
+        <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--panel-muted)] p-3 text-center">
+          <p className="text-xs text-[var(--text-secondary)]">Want a deeper compatibility analysis?</p>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onAnalyzeLifestyle?.(match.email);
+            }}
+            className="mt-2 w-full inline-flex items-center justify-center rounded-full bg-[linear-gradient(135deg,var(--brand),#fab148)] px-4 py-2 text-xs font-semibold text-white shadow-[0_4px_12px_rgba(240,96,79,0.2)] hover:opacity-90 transition active:scale-[0.98]"
+          >
+            Analyze
+          </button>
         </div>
-      )}
+      ) : null}
+
+      {isAnalyzing ? (
+        <div className="mt-4 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-center animate-pulse">
+          <p className="text-xs text-amber-400 flex items-center justify-center gap-2">
+            <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-amber-400 border-t-transparent" />
+            Analyzing Lifestyle compatibility with AI... ✨
+          </p>
+        </div>
+      ) : null}
+
+      {aiScore ? (
+        <div className="mt-4 rounded-xl border border-[var(--brand)]/15 bg-[var(--brand)]/5 p-3">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-bold text-[var(--brand-soft)] uppercase tracking-wider">
+              AI Lifestyle Match
+            </span>
+            <span className="rounded-full bg-[var(--brand)]/15 px-2 py-0.5 text-xs font-bold text-[var(--brand-soft)]">
+              {aiScore}% Fit
+            </span>
+          </div>
+          {aiReason && (
+            <p className="mt-2 text-[11px] leading-5 text-[var(--foreground)] italic">
+              ✨ {aiReason}
+            </p>
+          )}
+          {(aiStrengths || aiPotentialConflicts) && (
+            <div className="mt-3 space-y-2">
+              {aiStrengths && aiStrengths.length > 0 && (
+                <div>
+                  <p className="text-[9px] font-semibold uppercase tracking-wider text-emerald-400 mb-1">Strengths</p>
+                  <ul className="space-y-0.5">
+                    {aiStrengths.map((strength, idx) => (
+                      <li key={idx} className="text-[10px] text-[var(--foreground)] flex items-start gap-1">
+                        <span className="text-emerald-400">✓</span>
+                        <span>{strength}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {aiPotentialConflicts && aiPotentialConflicts.length > 0 && (
+                <div>
+                  <p className="text-[9px] font-semibold uppercase tracking-wider text-amber-400 mb-1">Potential Conflicts</p>
+                  <ul className="space-y-0.5">
+                    {aiPotentialConflicts.map((conflict, idx) => (
+                      <li key={idx} className="text-[10px] text-[var(--foreground)] flex items-start gap-1">
+                        <span className="text-amber-400">!</span>
+                        <span>{conflict}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      ) : null}
 
       {renderActions()}
 
@@ -375,7 +492,7 @@ export function ChatWindow({
       <div className="flex items-center justify-between border-b border-[var(--border)] p-4">
         <div>
           <h3 className="text-lg font-semibold">{match.name}</h3>
-          <p className="text-[10px] text-[var(--text-secondary)] uppercase tracking-wider">Year {match.year} • {match.course.toUpperCase()}</p>
+          <p className="text-[10px] text-[var(--text-secondary)] uppercase tracking-wider">Year {match.year || "?"} • {formatCourse(match.course)}</p>
         </div>
       </div>
       
