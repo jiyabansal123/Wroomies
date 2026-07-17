@@ -174,3 +174,31 @@ and generates:
   "potentialConflicts": [],
   "summary": ""
 }
+
+🔮 Future Enhancements
+Saved listings
+AI property recommendations
+Distance from campus calculations
+Notifications
+Advanced search filters
+Listing verification system
+Mobile application
+🎯 Motivation
+
+Finding a roommate is often based on guesswork, random allocations, or social media groups.
+
+Wroomies aims to make the process smarter by combining:
+
+Structured matching
+AI-powered compatibility analysis
+Student accommodation discovery
+
+into a single platform designed specifically for university students.
+
+👩‍💻 Author
+
+Jiya Bansal
+
+B.Tech Computer Science Engineering
+
+Built with the goal of helping students find better roommates and accommodation while exploring AI-powered product development.
