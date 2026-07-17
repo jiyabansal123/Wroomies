@@ -1,41 +1,176 @@
-Wroomies 🏠💬
+# 🏠 Wroomies
 
-Wroomies is a college-focused roommate matching platform designed to help students find compatible roommates based on lifestyle preferences. Users sign in using their university email, complete a lifestyle questionnaire, and get matched with others who have similar habits and preferences. Once matched, users can connect and chat within the platform.
+Wroomies is an AI-powered roommate and accommodation matching platform built for university students.
 
-🚀 Features
-🔐 Secure authentication using Azure Active Directory (university email login)
-🧠 14-question lifestyle questionnaire to understand user preferences
-🤝 Smart roommate matching based on compatibility scoring
-💌 Match acceptance system for mutual connection
-💬 Real-time chat between matched users
-🎯 Clean and simple UI designed for student usability
-🛠️ Tech Stack
-Frontend: Next.js
-Backend / Database: Supabase
-Authentication: Azure Active Directory (Azure AD)
-Real-time features: Supabase Realtime (for chat/matching updates)
-⚙️ How It Works
-Users log in using their university email via Azure AD
-They complete a 14-question lifestyle questionnaire
-The system calculates compatibility scores with other users
-Users receive potential roommate matches
-Both users can accept a match
-Once matched, a chat room is unlocked for communication
+The platform helps students find compatible roommates based on academic information and lifestyle preferences, while also allowing students to post and discover available rooms, beds, PGs, and flats around campus.
 
-🧠 Key Logic
-Matching is based on a weighted score system derived from questionnaire responses
-Higher similarity in lifestyle preferences increases match probability
-Matches require mutual acceptance before chat is enabled
-🔐 Authentication
+---
 
-Wroomies uses Azure Active Directory (Azure AD) to ensure only verified university students can access the platform.
+## ✨ Features
 
-📌 Future Improvements
-Improve matching algorithm using ML-based recommendations
-Add filters (budget, location, room type)
-Mobile app version
-Group roommate matching (more than 2 users)
-👨‍💻 Author
+### 🤝 Smart Roommate Matching
 
-Built by JB
-If you like this project or want to collaborate, feel free to connect.
+Find potential roommates based on:
+
+- Gender compatibility
+- Academic year
+- Course/branch
+
+Wroomies first performs objective matching and then provides deeper compatibility analysis.
+
+---
+
+### 🧠 AI Lifestyle Compatibility Analysis
+
+Powered by Groq LLMs.
+
+The AI analyzes questionnaire responses and non-negotiables to generate:
+
+- Compatibility Score
+- Lifestyle Strengths
+- Potential Conflicts
+- Roommate Summary
+
+Example insights:
+
+- Sleep schedule compatibility
+- Study habits
+- Cleanliness standards
+- Social preferences
+- Guest preferences
+- Shared living expectations
+
+---
+
+### 🏡 Room & Bed Listings
+
+Students can post:
+
+- PG vacancies
+- Flat vacancies
+- Vacant beds
+- Independent rooms
+
+Listing details include:
+
+- Address
+- Rent per person
+- Security deposit
+- BHK configuration
+- Vacant beds
+- Gender preference
+- Move-in availability
+- Amenities
+
+---
+
+### 📸 Image Uploads
+
+Listings support multiple photos using Supabase Storage.
+
+Users can upload room images and showcase their accommodation before receiving inquiries.
+
+---
+
+### 💬 Messaging System
+
+Built-in messaging allows students to communicate directly within the platform.
+
+No need to share personal contact information immediately.
+
+---
+
+### 🎓 University Verification
+
+Students authenticate using university email accounts, ensuring a trusted and student-focused community.
+
+---
+
+## 🛠 Tech Stack
+
+### Frontend
+
+- Next.js
+- React
+- TypeScript
+- Tailwind CSS
+
+### Backend
+
+- Supabase
+- PostgreSQL
+
+### AI
+
+- Groq API
+- LLM-based compatibility analysis
+
+### Storage
+
+- Supabase Storage
+
+---
+
+## 🗄 Database Design
+
+### Users
+
+Stores:
+
+- Profile information
+- Academic details
+- Lifestyle preferences
+- Room switching preferences
+
+### Match Requests
+
+Handles roommate requests and acceptance flow.
+
+### Messages
+
+Stores conversations between users.
+
+### Room Listings
+
+Stores:
+
+- Property information
+- Pricing
+- Amenities
+- Availability details
+
+### Listing Images
+
+Stores image URLs linked to listings.
+
+---
+
+## 🚀 How Matching Works
+
+### Phase 1: Academic Matching
+
+Candidates are shortlisted using:
+
+1. Same Gender
+2. Same Academic Year
+3. Same Course
+
+---
+
+### Phase 2: AI Compatibility Analysis
+
+The AI compares:
+
+- Lifestyle preferences
+- Daily routines
+- Non-negotiables
+
+and generates:
+
+```json
+{
+  "compatibilityScore": 84,
+  "strengths": [],
+  "potentialConflicts": [],
+  "summary": ""
+}
