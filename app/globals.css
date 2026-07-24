@@ -1,48 +1,46 @@
 @import "tailwindcss";
 
 :root {
-  --background: #0f1117;
-  --panel: rgba(20, 23, 32, 0.88);
-  --panel-muted: rgba(28, 33, 46, 0.88);
+  --background: #f5f2f8;
+  --panel: #ffffff;
+  --panel-muted: #ebe8f0;
   --bg-sidebar: var(--panel-muted);
   --bg-card: var(--panel);
-  --bg-accent-subtle: rgba(34, 40, 56, 0.92);
-  --brand: #f0604f;
-  --brand-strong: #ff765b;
-  --brand-soft: #ffb056;
-  --brand-muted: rgba(240, 96, 79, 0.12);
-  --brand-border: rgba(240, 96, 79, 0.22);
-  --foreground: #f6f0ea;
-  --text-secondary: #c2b7ae;
-  --text-muted: #8f877f;
-  --text-on-brand: #fff8f2;
-  --border: rgba(255, 255, 255, 0.08);
-  --border-strong: rgba(255, 255, 255, 0.16);
-  --border-hover: rgba(255, 255, 255, 0.18);
-  --card-shadow: 0 30px 80px rgba(0, 0, 0, 0.32);
+  --bg-accent-subtle: #e8e4ec;
+  --brand: #875cad;
+  --brand-strong: #c388a4;
+  --brand-soft: #d3a7c5;
+  --brand-muted: rgba(135, 92, 173, 0.12);
+  --brand-border: rgba(135, 92, 173, 0.22);
+  --foreground: #0E0912;
+  --text-secondary: #4a4450;
+  --text-muted: #7a7480;
+  --text-on-brand: #ffffff;
+  --border: rgba(14, 9, 18, 0.12);
+  --border-strong: rgba(14, 9, 18, 0.18);
+  --border-hover: rgba(14, 9, 18, 0.24);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0f1117;
-    --panel: rgba(20, 23, 32, 0.88);
-    --panel-muted: rgba(28, 33, 46, 0.88);
+    --background: #f5f2f8;
+    --panel: #ffffff;
+    --panel-muted: #ebe8f0;
     --bg-sidebar: var(--panel-muted);
     --bg-card: var(--panel);
-    --bg-accent-subtle: rgba(34, 40, 56, 0.92);
-    --brand: #f0604f;
-    --brand-strong: #ff765b;
-    --brand-soft: #ffb056;
-    --brand-muted: rgba(240, 96, 79, 0.12);
-    --brand-border: rgba(240, 96, 79, 0.22);
-    --foreground: #f6f0ea;
-    --text-secondary: #c2b7ae;
-    --text-muted: #8f877f;
-    --text-on-brand: #fff8f2;
-    --border: rgba(255, 255, 255, 0.08);
-    --border-strong: rgba(255, 255, 255, 0.16);
-    --border-hover: rgba(255, 255, 255, 0.18);
-    --card-shadow: 0 30px 80px rgba(0, 0, 0, 0.32);
+    --bg-accent-subtle: #e8e4ec;
+    --brand: #875cad;
+    --brand-strong: #c388a4;
+    --brand-soft: #d3a7c5;
+    --brand-muted: rgba(135, 92, 173, 0.12);
+    --brand-border: rgba(135, 92, 173, 0.22);
+    --foreground: #0E0912;
+    --text-secondary: #4a4450;
+    --text-muted: #7a7480;
+    --text-on-brand: #ffffff;
+    --border: rgba(14, 9, 18, 0.12);
+    --border-strong: rgba(14, 9, 18, 0.18);
+    --border-hover: rgba(14, 9, 18, 0.24);
   }
 }
 
@@ -57,9 +55,6 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans), sans-serif;
-  background-image:
-    radial-gradient(circle at top, rgba(240, 96, 79, 0.12), transparent 36%),
-    radial-gradient(circle at bottom right, rgba(255, 176, 86, 0.08), transparent 22%);
 }
 
 * {
@@ -67,6 +62,6 @@ body {
 }
 
 ::selection {
-  background: rgba(240, 96, 79, 0.3);
+  background: rgba(135, 92, 173, 0.2);
   color: var(--foreground);
 }

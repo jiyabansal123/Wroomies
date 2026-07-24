@@ -66,7 +66,7 @@ export default function Home() {
   const [chatUsers, setChatUsers] = useState<MatchUser[]>([]);
   const [isRetaking, setIsRetaking] = useState(false);
   const [isDemoMode, setIsDemoMode] = useState(false);
-  const [aiResults, setAiResults] = useState<Record<string, { compatibilityScore: number; reason: string; strengths?: string[]; potentialConflicts?: string[]; summary?: string }>>({});
+  const [aiResults, setAiResults] = useState<Record<string, { score: number; summary: string; strengths: string[]; conflicts: string[]; recommendation: string }>>({});
   const [analyzingEmails, setAnalyzingEmails] = useState<Record<string, boolean>>({});
 
   const userEmail = isDemoMode ? "demo@wroomies.com" : (session?.user?.email ?? "");
@@ -532,11 +532,11 @@ export default function Home() {
         setAiResults((prev) => ({
           ...prev,
           [email]: {
-            compatibilityScore: 94,
-            reason: "Both prefer quiet evening study sessions and keep their personal areas clean.",
-            strengths: ["Similar sleep schedules", "Shared cleanliness standards", "Compatible study habits"],
-            potentialConflicts: ["Different guest preferences may need discussion"],
-            summary: "Strong lifestyle compatibility with minor areas to discuss before moving in together."
+            score: 75,
+            summary: "These students share similar cleanliness standards but have different sleep schedules that may require discussion. Both value quiet study time, though guest preferences differ slightly.",
+            strengths: ["Similar cleanliness expectations", "Compatible study habits", "Aligned on noise preferences"],
+            conflicts: ["Different sleep schedules", "Different guest frequency preferences"],
+            recommendation: "Good Match",
           },
         }));
         return;
@@ -570,16 +570,26 @@ export default function Home() {
       setAiResults((prev) => ({
         ...prev,
         [email]: {
-          compatibilityScore: data.compatibilityScore,
-          reason: data.summary,
-          strengths: data.strengths,
-          potentialConflicts: data.potentialConflicts,
-          summary: data.summary,
+          score: data.score || 50,
+          summary: data.summary || "Compatibility analysis complete.",
+          strengths: data.strengths || [],
+          conflicts: data.conflicts || [],
+          recommendation: data.recommendation || "Moderate Match",
         },
       }));
     } catch (err: any) {
       console.error("AI Lifestyle Match Analysis error:", err);
       setError(err?.message || "An unexpected error occurred during AI analysis.");
+      setAiResults((prev) => ({
+        ...prev,
+        [email]: {
+          score: 50,
+          summary: "Compatibility analysis is temporarily unavailable.",
+          strengths: ["Unable to analyze"],
+          conflicts: ["Try again later"],
+          recommendation: "Moderate Match",
+        },
+      }));
     } finally {
       setAnalyzingEmails((prev) => ({ ...prev, [email]: false }));
     }
@@ -710,17 +720,11 @@ export default function Home() {
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-[var(--background)] text-[var(--foreground)]">
-      <div className="pointer-events-none absolute inset-0 opacity-95" aria-hidden="true">
-        <div className="absolute inset-x-0 top-0 h-[460px] bg-[radial-gradient(circle_at_top,rgba(240,96,79,0.26),transparent_60%)]" />
-        <div className="absolute left-[-140px] top-24 h-80 w-80 rounded-full bg-[rgba(240,96,79,0.18)] blur-[130px]" />
-        <div className="absolute bottom-[-160px] right-[-120px] h-96 w-96 rounded-full bg-[rgba(250,177,72,0.14)] blur-[140px]" />
-      </div>
-
       <div className="relative mx-auto flex min-h-screen max-w-6xl gap-6 px-4 py-4 sm:px-6 lg:px-8">
-        <aside className="sticky top-4 hidden h-[calc(100vh-2rem)] w-[280px] flex-shrink-0 flex-col rounded-[32px] border border-[var(--border)] bg-[var(--panel)] p-4 shadow-[var(--card-shadow)] lg:flex">
+        <aside className="sticky top-4 hidden h-[calc(100vh-2rem)] w-[280px] flex-shrink-0 flex-col rounded-[32px] border border-[var(--border)] bg-[var(--panel)] p-4 lg:flex">
           <div className="flex flex-1 flex-col gap-4 overflow-y-auto pr-1 scrollbar-hide">
             {/* Header */}
-            <div className="rounded-[28px] border border-[var(--border)] bg-[linear-gradient(180deg,rgba(240,96,79,0.16),rgba(255,255,255,0.03))] p-5">
+            <div className="rounded-[28px] border border-[var(--border)] bg-[var(--panel-muted)] p-5">
               <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-[var(--brand-soft)]">Wroomies</p>
               <h1 className="mt-3 text-2xl font-semibold leading-tight tracking-[-0.04em] text-[var(--foreground)]">
                 Roommate search with more clarity.
@@ -735,15 +739,22 @@ export default function Home() {
               {matchRequests.some(r => r.status === 'accepted') && (
                 <TabButton active={activeTab === "chat"} label="Your Matches" onClick={() => setActiveTab("chat")} />
               )}
-            </div>
-
-            {/* Readiness Card */}
-            <div className="rounded-[28px] border border-[var(--border)] bg-[var(--panel-muted)] p-5">
-              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--text-muted)]">Ready to match</p>
-              <p className="mt-2 text-4xl font-semibold tracking-[-0.06em] text-[var(--foreground)]">{readinessPercent}%</p>
-              <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-[rgba(255,255,255,0.07)]">
-                <div className="h-full rounded-full bg-[linear-gradient(90deg,var(--brand),var(--brand-soft))]" style={{ width: `${readinessPercent}%` }} />
-              </div>
+              <Link href="/listings" className="block">
+                <div className={`flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition ${
+                  false ? "bg-[var(--brand)] text-[var(--text-on-brand)]" : "text-[var(--foreground)] hover:bg-[var(--panel-muted)]"
+                }`}>
+                  <span>🏠</span>
+                  <span>Listings</span>
+                </div>
+              </Link>
+              <Link href="/create-listing" className="block">
+                <div className={`flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition ${
+                  false ? "bg-[var(--brand)] text-[var(--text-on-brand)]" : "text-[var(--foreground)] hover:bg-[var(--panel-muted)]"
+                }`}>
+                  <span>➕</span>
+                  <span>Create Listing</span>
+                </div>
+              </Link>
             </div>
           </div>
 
@@ -765,8 +776,8 @@ export default function Home() {
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col gap-5">
-          <header className="rounded-2xl border border-[var(--border)] bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(19,22,31,0.92))] p-5 shadow-[var(--card-shadow)] sm:p-6">
-            {activeTab === "matches" && (
+          {activeTab === "matches" && (
+            <header className="rounded-2xl border border-[var(--border)] bg-[var(--panel)] p-5 sm:p-6">
               <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
                 <div className="max-w-3xl">
                   <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[var(--text-muted)]">Dashboard</p>
@@ -786,17 +797,33 @@ export default function Home() {
                   <StatCard label="Candidates" value={String(totalMatchesFound)} hint={totalMatchesFound > 0 ? "Current ranked shortlist." : "No shortlist generated yet."} />
                 </div>
               </div>
-            )}
+            </header>
+          )}
 
-            <div className={`${activeTab === "matches" ? "mt-6" : "mt-0"} flex flex-wrap gap-3 lg:hidden`}>
-              <TabButton active={activeTab === "matches"} label="Find Matches" onClick={() => setActiveTab("matches")} />
-              <TabButton active={activeTab === "profile"} label="Profile" onClick={() => setActiveTab("profile")} />
-              <TabButton active={activeTab === "preferences"} label="Preferences" onClick={() => setActiveTab("preferences")} />
-              {matchRequests.some(r => r.status === 'accepted') && (
-                <TabButton active={activeTab === "chat"} label="Your Matches" onClick={() => setActiveTab("chat")} />
-              )}
-            </div>
-          </header>
+          <div className="flex flex-wrap gap-3 lg:hidden">
+            <TabButton active={activeTab === "matches"} label="Find Matches" onClick={() => setActiveTab("matches")} />
+            <TabButton active={activeTab === "profile"} label="Profile" onClick={() => setActiveTab("profile")} />
+            <TabButton active={activeTab === "preferences"} label="Preferences" onClick={() => setActiveTab("preferences")} />
+            {matchRequests.some(r => r.status === 'accepted') && (
+              <TabButton active={activeTab === "chat"} label="Your Matches" onClick={() => setActiveTab("chat")} />
+            )}
+            <Link href="/listings" className="block">
+              <div className={`flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition ${
+                false ? "bg-[var(--brand)] text-[var(--text-on-brand)]" : "text-[var(--foreground)] hover:bg-[var(--panel-muted)]"
+              }`}>
+                <span>🏠</span>
+                <span>Listings</span>
+              </div>
+            </Link>
+            <Link href="/create-listing" className="block">
+              <div className={`flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition ${
+                false ? "bg-[var(--brand)] text-[var(--text-on-brand)]" : "text-[var(--foreground)] hover:bg-[var(--panel-muted)]"
+              }`}>
+                <span>➕</span>
+                <span>Create Listing</span>
+              </div>
+            </Link>
+          </div>
 
           {activeTab === "profile" ? (
             <SectionShell eyebrow="Profile" title="Room context and basics" description="These details power the first layer of roommate scoring and make match pages more useful.">
@@ -852,10 +879,10 @@ export default function Home() {
                       <span>{getProgressValue(currentQuestionIndex + 1, QUESTIONS.length)}%</span>
                     </div>
                     <div className="h-2 overflow-hidden rounded-full bg-[rgba(255,255,255,0.07)]">
-                      <div className="h-full rounded-full bg-[linear-gradient(90deg,var(--brand),var(--brand-soft))]" style={{ width: `${getProgressValue(currentQuestionIndex + 1, QUESTIONS.length)}%` }} />
+                      <div className="h-full rounded-full bg-[var(--brand)]" style={{ width: `${getProgressValue(currentQuestionIndex + 1, QUESTIONS.length)}%` }} />
                     </div>
                   </div>
-                  <div className="rounded-[28px] border border-[var(--border)] bg-[linear-gradient(180deg,rgba(240,96,79,0.08),rgba(255,255,255,0.02))] p-5 sm:p-6">
+                  <div className="rounded-[28px] border border-[var(--border)] bg-[var(--panel-muted)] p-5 sm:p-6">
                     <h3 className="text-2xl font-semibold tracking-[-0.03em] text-[var(--foreground)]">{currentQuestion.question}</h3>
                     <div className="mt-6 grid gap-3">
                       {currentQuestion.options.map((option) => {
@@ -953,11 +980,13 @@ export default function Home() {
                             onAcceptRequest={handleAcceptRequest}
                             onRejectRequest={handleRejectRequest}
                             onAnalyzeLifestyle={handleAnalyzeLifestyle}
-                            aiScore={aiResults[match.email]?.compatibilityScore}
-                            aiReason={aiResults[match.email]?.reason}
+                            aiScore={aiResults[match.email]?.score}
+                            aiMatchLevel={aiResults[match.email]?.recommendation}
+                            aiSummary={aiResults[match.email]?.summary}
                             aiStrengths={aiResults[match.email]?.strengths}
-                            aiPotentialConflicts={aiResults[match.email]?.potentialConflicts}
+                            aiConflicts={aiResults[match.email]?.conflicts}
                             isAnalyzing={analyzingEmails[match.email]}
+                            isAcademicMatch={true}
                             onMessage={(m) => {
                               setSelectedChatUser(m);
                               setActiveTab("chat");
@@ -973,12 +1002,10 @@ export default function Home() {
                   <div className="flex flex-col items-center gap-4 rounded-[32px] border border-dashed border-[var(--border-strong)] bg-[var(--panel-muted)] p-8 text-center">
                     <div>
                       <p className="text-lg font-semibold text-[var(--foreground)]">
-                        Looking beyond your year?
+                        Looking Beyond Your Year?
                       </p>
                       <p className="mt-2 max-w-md text-sm leading-6 text-[var(--text-secondary)]">
-                        {exploreMatches.length > 0
-                          ? `${exploreMatches.length} student${exploreMatches.length === 1 ? "" : "s"} from other years share compatible lifestyles with you.`
-                          : "Browse students from other academic years who may still be a lifestyle fit."}
+                        Explore students from different years and courses. Great roommates aren't always in the same batch.
                       </p>
                     </div>
                     <Link href="/explore" className={secondaryButtonClass}>

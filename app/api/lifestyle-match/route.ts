@@ -18,10 +18,11 @@ type UserProfile = {
 };
 
 type LifestyleMatchResult = {
-  compatibilityScore: number;
-  strengths: string[];
-  potentialConflicts: string[];
+  score: number;
   summary: string;
+  strengths: string[];
+  conflicts: string[];
+  recommendation: string;
 };
 
 type GroqChatResponse = {
@@ -129,12 +130,45 @@ async function analyzeLifestyleCompatibility(currentUser: UserProfile, candidate
       messages: [
         {
           role: "system",
-          content: "You are an expert roommate compatibility evaluator. Compare the lifestyle preferences of two students and determine how compatible they would be as roommates. Focus on practical day-to-day living compatibility. Be balanced and identify both strengths and potential conflicts.\n\nProvide your response in this exact paragraph format:\n\nCompatibility Score: [0-100]\n\nStrengths:\n- [strength 1]\n- [strength 2]\n\nPotential Conflicts:\n- [conflict 1]\n- [conflict 2]\n\nSummary: [brief summary]",
+          content:
+            "You are an expert roommate compatibility evaluator. Your goal is to HONESTLY evaluate whether two people can successfully share a room.\n\n" +
+            "IMPORTANT RULES:\n" +
+            "1. Identify conflicts BEFORE strengths.\n" +
+            "2. Major conflicts should HEAVILY reduce the score:\n" +
+            "   - Cleanliness standards\n" +
+            "   - Sleep schedule differences\n" +
+            "   - Guest frequency preferences\n" +
+            "   - Shared responsibilities\n" +
+            "   - Study environment needs\n\n" +
+            "3. Minor differences should have VERY LITTLE impact:\n" +
+            "   - Birthdays\n" +
+            "   - Decorations\n" +
+            "   - Hobbies\n\n" +
+            "4. NEVER inflate scores. Be brutally honest.\n\n" +
+            "SCORING GUIDE:\n" +
+            "90-100: Nearly ideal roommate pair\n" +
+            "75-89: Strong compatibility with minor differences\n" +
+            "60-74: Reasonable compatibility but several compromises needed\n" +
+            "40-59: Significant lifestyle differences. Roommate relationship may require effort\n" +
+            "0-39: Poor compatibility. Frequent conflicts likely\n\n" +
+            "REQUIREMENTS:\n" +
+            "- Always provide 2-4 strengths\n" +
+            "- Always provide 2-4 conflicts/weaknesses\n" +
+            "- If major conflicts exist, they MUST appear in the conflicts section\n" +
+            "- Summary should be 2-4 sentences, honest and direct\n\n" +
+            "Return ONLY valid JSON in this exact format:\n" +
+            "{\n" +
+            "  \"score\": 75,\n" +
+            "  \"summary\": \"...\",\n" +
+            "  \"strengths\": [\"...\", \"...\"],\n" +
+            "  \"conflicts\": [\"...\", \"...\"],\n" +
+            "  \"recommendation\": \"Good Match\"\n" +
+            "}",
         },
         {
           role: "user",
           content: JSON.stringify({
-            task: "Analyze lifestyle compatibility between two potential roommates.",
+            task: "Evaluate roommate compatibility between two potential roommates.",
             currentUserPreferences: currentUser.preferences ?? {},
             candidateUserPreferences: candidateUser.preferences ?? {},
           }),
@@ -155,83 +189,48 @@ async function analyzeLifestyleCompatibility(currentUser: UserProfile, candidate
     throw new Error("AI API returned an empty response.");
   }
 
-  return parseParagraphResponse(content);
+  return validateJsonResponse(JSON.parse(content));
 }
 
-function parseParagraphResponse(content: string): LifestyleMatchResult {
-  const lines = content.split('\n').map(line => line.trim()).filter(line => line.length > 0);
-  
-  let compatibilityScore = 50;
-  const strengths: string[] = [];
-  const potentialConflicts: string[] = [];
-  let summary = "";
-  
-  let currentSection: 'score' | 'strengths' | 'conflicts' | 'summary' | null = null;
-  
-  for (const line of lines) {
-    const lowerLine = line.toLowerCase();
-    
-    if (lowerLine.includes('compatibility score') || lowerLine.includes('score:')) {
-      const match = line.match(/\d+/);
-      if (match) {
-        compatibilityScore = parseInt(match[0], 10);
-      }
-      currentSection = 'score';
-    } else if (lowerLine.includes('strengths') || lowerLine.includes('strength:')) {
-      currentSection = 'strengths';
-    } else if (lowerLine.includes('potential conflicts') || lowerLine.includes('conflicts') || lowerLine.includes('conflict:')) {
-      currentSection = 'conflicts';
-    } else if (lowerLine.includes('summary') || lowerLine.includes('summary:')) {
-      currentSection = 'summary';
-      const summaryMatch = line.replace(/summary:?/i, '').trim();
-      if (summaryMatch) {
-        summary = summaryMatch;
-      }
-    } else {
-      // Parse list items
-      if (line.startsWith('-') || line.startsWith('•') || line.startsWith('*')) {
-        const item = line.replace(/^[-•*]\s*/, '').trim();
-        if (item) {
-          if (currentSection === 'strengths') {
-            strengths.push(item);
-          } else if (currentSection === 'conflicts') {
-            potentialConflicts.push(item);
-          }
-        }
-      } else if (currentSection === 'summary' && !summary) {
-        summary = line;
-      }
-    }
+function validateJsonResponse(value: unknown): LifestyleMatchResult {
+  if (!isRecord(value)) {
+    throw new Error("AI API returned invalid JSON: expected an object.");
   }
-  
-  // Fallback: if no structured data found, try to extract from the whole text
-  if (strengths.length === 0 && potentialConflicts.length === 0) {
-    // Simple keyword-based extraction as fallback
-    const positiveKeywords = ['compatible', 'similar', 'aligned', 'good match', 'well-suited'];
-    const negativeKeywords = ['conflict', 'different', 'mismatch', 'concern', 'issue'];
-    
-    const sentences = content.split(/[.!?]/).map(s => s.trim()).filter(s => s.length > 10);
-    
-    for (const sentence of sentences) {
-      const lowerSentence = sentence.toLowerCase();
-      if (positiveKeywords.some(kw => lowerSentence.includes(kw))) {
-        strengths.push(sentence);
-      }
-      if (negativeKeywords.some(kw => lowerSentence.includes(kw))) {
-        potentialConflicts.push(sentence);
-      }
-    }
-    
-    if (!summary) {
-      summary = content.substring(0, 200) + '...';
-    }
+
+  const score = value.score;
+  const summary = value.summary;
+  const strengths = value.strengths;
+  const conflicts = value.conflicts;
+  const recommendation = value.recommendation;
+
+  if (typeof score !== "number" || score < 0 || score > 100) {
+    throw new Error("AI API returned an invalid score.");
   }
-  
+
+  if (typeof summary !== "string" || summary.trim().length === 0) {
+    throw new Error("AI API returned an invalid summary.");
+  }
+
+  if (!Array.isArray(strengths) || strengths.length === 0) {
+    throw new Error("AI API returned invalid strengths.");
+  }
+
+  if (!Array.isArray(conflicts) || conflicts.length === 0) {
+    throw new Error("AI API returned invalid conflicts.");
+  }
+
+  let finalRecommendation = recommendation as string;
+  if (typeof recommendation !== "string" || !["Excellent Match", "Good Match", "Moderate Match", "Challenging Match"].includes(recommendation)) {
+    // Fallback to a default recommendation if invalid
+    finalRecommendation = "Moderate Match";
+  }
+
   return {
-    compatibilityScore: Math.min(100, Math.max(0, compatibilityScore)),
-    strengths: strengths.slice(0, 5), // Limit to 5 strengths
-    potentialConflicts: potentialConflicts.slice(0, 5), // Limit to 5 conflicts
-    summary: summary || content.substring(0, 200) + '...',
+    score: Math.round(score),
+    summary: summary.trim(),
+    strengths: strengths.slice(0, 4).map((s: string) => s.trim()),
+    conflicts: conflicts.slice(0, 4).map((c: string) => c.trim()),
+    recommendation: finalRecommendation,
   };
 }
 

@@ -18,8 +18,11 @@ type UserProfile = {
 
 type AiMatchResult = {
   candidateId: string;
-  compatibilityScore: number;
-  reason: string;
+  score: number;
+  summary: string;
+  strengths: string[];
+  conflicts: string[];
+  recommendation: string;
 };
 
 type GrokChatResponse = {
@@ -174,57 +177,57 @@ async function rankCandidatesWithGrok(currentUser: UserProfile, candidates: User
     },
     body: JSON.stringify({
       model: model,
-      temperature: 0.2,
+      temperature: 0.1,
       messages: [
         {
           role: "system",
           content:
-            "You rank roommate candidates. Use preferences as nuanced compatibility signals, not hard rules. Return only JSON that matches the schema.",
+            "You are an expert roommate compatibility evaluator. Your goal is to HONESTLY evaluate whether two people can successfully share a room.\n\n" +
+            "IMPORTANT RULES:\n" +
+            "1. Identify conflicts BEFORE strengths.\n" +
+            "2. Major conflicts should HEAVILY reduce the score:\n" +
+            "   - Cleanliness standards\n" +
+            "   - Sleep schedule differences\n" +
+            "   - Guest frequency preferences\n" +
+            "   - Shared responsibilities\n" +
+            "   - Study environment needs\n\n" +
+            "3. Minor differences should have VERY LITTLE impact:\n" +
+            "   - Birthdays\n" +
+            "   - Decorations\n" +
+            "   - Hobbies\n\n" +
+            "4. NEVER inflate scores. Be brutally honest.\n\n" +
+            "SCORING GUIDE:\n" +
+            "90-100: Nearly ideal roommate pair\n" +
+            "75-89: Strong compatibility with minor differences\n" +
+            "60-74: Reasonable compatibility but several compromises needed\n" +
+            "40-59: Significant lifestyle differences. Roommate relationship may require effort\n" +
+            "0-39: Poor compatibility. Frequent conflicts likely\n\n" +
+            "REQUIREMENTS:\n" +
+            "- Always provide 2-4 strengths\n" +
+            "- Always provide 2-4 conflicts/weaknesses\n" +
+            "- If major conflicts exist, they MUST appear in the conflicts section\n" +
+            "- Summary should be 2-4 sentences, honest and direct\n\n" +
+            "Return ONLY valid JSON in this exact format:\n" +
+            "[\n" +
+            "  {\n" +
+            "    \"candidateId\": \"email@example.com\",\n" +
+            "    \"score\": 75,\n" +
+            "    \"summary\": \"...\",\n" +
+            "    \"strengths\": [\"...\", \"...\"],\n" +
+            "    \"conflicts\": [\"...\", \"...\"],\n" +
+            "    \"recommendation\": \"Good Match\"\n" +
+            "  }\n" +
+            "]",
         },
         {
           role: "user",
           content: JSON.stringify({
-            task: "Rank these candidates by roommate compatibility for the current user.",
-            scoring:
-              "Score 0-100. Prefer compatible daily routines, sleep, cleanliness, noise, guests, conflict style, sharing, and social expectations. Explain in one concise sentence.",
+            task: "Evaluate roommate compatibility for the current user with each candidate.",
             currentUser: toAiProfile(currentUser),
             candidates: candidates.map(toAiProfile),
           }),
         },
       ],
-      response_format: {
-        type: "json_schema",
-        json_schema: {
-          name: "roommate_compatibility_rankings",
-          strict: true,
-          schema: {
-            type: "array",
-            minItems: 0,
-            maxItems: 10,
-            items: {
-              type: "object",
-              additionalProperties: false,
-              required: ["candidateId", "compatibilityScore", "reason"],
-              properties: {
-                candidateId: {
-                  type: "string",
-                  description: "The candidate email from the provided candidate profile.",
-                },
-                compatibilityScore: {
-                  type: "number",
-                  minimum: 0,
-                  maximum: 100,
-                },
-                reason: {
-                  type: "string",
-                  minLength: 1,
-                  maxLength: 240,
-                },
-              },
-            },
-          },
-        },
-      },
     }),
   });
 
@@ -258,30 +261,50 @@ function validateRankings(value: unknown, candidates: UserProfile[]) {
       }
 
       const candidateId = item.candidateId;
-      const compatibilityScore = item.compatibilityScore;
-      const reason = item.reason;
+      const score = item.score;
+      const summary = item.summary;
+      const strengths = item.strengths;
+      const conflicts = item.conflicts;
+      const recommendation = item.recommendation;
 
       if (typeof candidateId !== "string" || !candidateIds.has(candidateId) || seen.has(candidateId)) {
         throw new Error("Grok API returned an unknown or duplicate candidateId.");
       }
 
-      if (typeof compatibilityScore !== "number" || compatibilityScore < 0 || compatibilityScore > 100) {
-        throw new Error("Grok API returned an invalid compatibilityScore.");
+      if (typeof score !== "number" || score < 0 || score > 100) {
+        throw new Error("Grok API returned an invalid score.");
       }
 
-      if (typeof reason !== "string" || reason.trim().length === 0) {
-        throw new Error("Grok API returned an invalid reason.");
+      if (typeof summary !== "string" || summary.trim().length === 0) {
+        throw new Error("Grok API returned an invalid summary.");
+      }
+
+      if (!Array.isArray(strengths) || strengths.length === 0) {
+        throw new Error("Grok API returned invalid strengths.");
+      }
+
+      if (!Array.isArray(conflicts) || conflicts.length === 0) {
+        throw new Error("Grok API returned invalid conflicts.");
+      }
+
+      let finalRecommendation = recommendation as string;
+      if (typeof recommendation !== "string" || !["Excellent Match", "Good Match", "Moderate Match", "Challenging Match"].includes(recommendation)) {
+        // Fallback to a default recommendation if invalid
+        finalRecommendation = "Moderate Match";
       }
 
       seen.add(candidateId);
 
       return {
         candidateId,
-        compatibilityScore: Math.round(compatibilityScore),
-        reason: reason.trim(),
+        score: Math.round(score),
+        summary: summary.trim(),
+        strengths: strengths.slice(0, 4).map((s: string) => s.trim()),
+        conflicts: conflicts.slice(0, 4).map((c: string) => c.trim()),
+        recommendation: finalRecommendation,
       } satisfies AiMatchResult;
     })
-    .sort((a, b) => b.compatibilityScore - a.compatibilityScore);
+    .sort((a, b) => b.score - a.score);
 }
 
 function toAiProfile(profile: UserProfile) {

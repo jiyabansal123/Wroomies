@@ -4,7 +4,7 @@ import { signIn } from "next-auth/react";
 import { MatchUser, formatCourse, UserProfile } from "./home-data";
 
 export const primaryButtonClass =
-  "inline-flex items-center justify-center rounded-full bg-[var(--brand)] px-4 py-2 text-sm font-semibold text-[var(--text-on-brand)] shadow-[0_12px_30px_rgba(240,96,79,0.24)] transition hover:-translate-y-0.5 hover:bg-[var(--brand-strong)] focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/50 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0";
+  "inline-flex items-center justify-center rounded-full bg-[var(--brand)] px-4 py-2 text-sm font-semibold text-[var(--text-on-brand)] transition hover:-translate-y-0.5 hover:bg-[var(--brand-strong)] focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/50 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0";
 
 export const secondaryButtonClass =
   "inline-flex items-center justify-center rounded-full border border-[var(--border-strong)] bg-[var(--panel-muted)] px-4 py-2 text-sm font-semibold text-[var(--foreground)] transition hover:border-[var(--brand)]/40 hover:bg-[var(--panel)] focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/30 disabled:cursor-not-allowed disabled:opacity-60";
@@ -24,7 +24,7 @@ export function SectionShell({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-xl border border-[var(--border)] bg-[var(--panel)] p-4 shadow-[var(--card-shadow)] backdrop-blur md:p-6">
+    <section className="rounded-xl border border-[var(--border)] bg-[var(--panel)] p-4 backdrop-blur md:p-6">
       <div className="mb-5 space-y-2">
         {eyebrow ? (
           <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--text-muted)]">
@@ -55,7 +55,7 @@ export function StatCard({
   hint: string;
 }) {
   return (
-    <div className="rounded-xl border border-[var(--border)] bg-[var(--panel-muted)] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]">
+    <div className="rounded-xl border border-[var(--border)] bg-[var(--panel-muted)] p-3">
       <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-[var(--text-muted)]">
         {label}
       </p>
@@ -101,7 +101,7 @@ export function TabButton({
       onClick={onClick}
       className={`rounded-full px-4 py-2 text-sm font-medium transition ${
         active
-          ? "bg-[var(--brand)] text-[var(--text-on-brand)] shadow-[0_10px_30px_rgba(240,96,79,0.24)]"
+          ? "bg-[var(--brand)] text-[var(--text-on-brand)]"
           : "bg-[var(--panel-muted)] text-[var(--text-secondary)] hover:bg-[var(--panel)] hover:text-[var(--foreground)]"
       }`}
     >
@@ -121,10 +121,12 @@ export function MatchCard({
   onMessage,
   onAnalyzeLifestyle,
   aiScore,
-  aiReason,
+  aiMatchLevel,
+  aiSummary,
   aiStrengths,
-  aiPotentialConflicts,
+  aiConflicts,
   isAnalyzing = false,
+  isAcademicMatch = true,
 }: {
   match: MatchUser;
   featured?: boolean;
@@ -136,10 +138,12 @@ export function MatchCard({
   onMessage?: (match: MatchUser) => void;
   onAnalyzeLifestyle?: (email: string) => void;
   aiScore?: number;
-  aiReason?: string;
+  aiMatchLevel?: string;
+  aiSummary?: string;
   aiStrengths?: string[];
-  aiPotentialConflicts?: string[];
+  aiConflicts?: string[];
   isAnalyzing?: boolean;
+  isAcademicMatch?: boolean;
 }) {
   const renderActions = () => {
     if (match.matchStatus === "accepted") {
@@ -211,8 +215,8 @@ export function MatchCard({
       onClick={onClick}
       className={`group block cursor-pointer rounded-xl border p-4 transition hover:-translate-y-1 ${
         featured
-          ? "border-[var(--brand)]/30 bg-[linear-gradient(180deg,rgba(240,96,79,0.12),rgba(19,22,31,0.92))] shadow-[0_20px_60px_rgba(240,96,79,0.18)]"
-          : "border-[var(--border)] bg-[var(--panel-muted)] shadow-[var(--card-shadow)] hover:border-[var(--border-strong)]"
+          ? "border-[var(--brand)]/30 bg-[var(--panel-muted)]"
+          : "border-[var(--border)] bg-[var(--panel-muted)] hover:border-[var(--border-strong)]"
       }`}
     >
       {/* Header */}
@@ -226,11 +230,13 @@ export function MatchCard({
           </h3>
         </div>
         <div className="flex flex-col items-end gap-1">
-          <div className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-bold text-emerald-400">
-            Academic Match
-          </div>
+          {isAcademicMatch && (
+            <div className="rounded-full border border-[var(--brand)]/20 bg-[var(--brand)]/10 px-2.5 py-0.5 text-[10px] font-bold text-[var(--brand)]">
+              Academic Match
+            </div>
+          )}
           {match.matchStatus === "accepted" && (
-            <div className="rounded-full bg-[rgba(125,255,125,0.1)] border border-[rgba(125,255,125,0.3)] px-2 py-0.5 text-[9px] font-bold text-[rgb(125,255,125)] uppercase tracking-wider">
+            <div className="rounded-full bg-[var(--brand)]/10 border border-[var(--brand)]/30 px-2 py-0.5 text-[9px] font-bold text-[var(--brand)] uppercase tracking-wider">
               Matched
             </div>
           )}
@@ -269,17 +275,17 @@ export function MatchCard({
       {/* Why they appeared in results */}
       <div className="mt-4 flex flex-wrap gap-1.5">
         {(hasSameYear || (!currentUser && !featured)) && (
-          <span className="inline-flex items-center gap-1 rounded-[6px] bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 text-[10px] text-emerald-400 font-medium">
+          <span className="inline-flex items-center gap-1 rounded-[6px] bg-[var(--brand)]/10 border border-[var(--brand)]/20 px-2 py-0.5 text-[10px] text-[var(--brand)] font-medium">
             ✓ Same Year
           </span>
         )}
         {(hasSameCourse || (!currentUser && match.course)) && (
-          <span className="inline-flex items-center gap-1 rounded-[6px] bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 text-[10px] text-emerald-400 font-medium">
+          <span className="inline-flex items-center gap-1 rounded-[6px] bg-[var(--brand)]/10 border border-[var(--brand)]/20 px-2 py-0.5 text-[10px] text-[var(--brand)] font-medium">
             ✓ Same Course
           </span>
         )}
         {(hasSameGender || (!currentUser && match.gender)) && (
-          <span className="inline-flex items-center gap-1 rounded-[6px] bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 text-[10px] text-emerald-400 font-medium">
+          <span className="inline-flex items-center gap-1 rounded-[6px] bg-[var(--brand)]/10 border border-[var(--brand)]/20 px-2 py-0.5 text-[10px] text-[var(--brand)] font-medium">
             ✓ Same Gender
           </span>
         )}
@@ -299,7 +305,7 @@ export function MatchCard({
               e.stopPropagation();
               onAnalyzeLifestyle?.(match.email);
             }}
-            className="mt-2 w-full inline-flex items-center justify-center rounded-full bg-[linear-gradient(135deg,var(--brand),#fab148)] px-4 py-2 text-xs font-semibold text-white shadow-[0_4px_12px_rgba(240,96,79,0.2)] hover:opacity-90 transition active:scale-[0.98]"
+            className="mt-2 w-full inline-flex items-center justify-center rounded-full px-4 py-2 text-xs font-semibold transition active:scale-[0.98] border border-[var(--border)] bg-[var(--panel-muted)] text-[var(--foreground)] hover:border-[var(--border-strong)]"
           >
             Analyze
           </button>
@@ -317,7 +323,7 @@ export function MatchCard({
 
       {aiScore ? (
         <div className="mt-4 rounded-xl border border-[var(--brand)]/15 bg-[var(--brand)]/5 p-3">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between mb-2">
             <span className="text-[10px] font-bold text-[var(--brand-soft)] uppercase tracking-wider">
               AI Lifestyle Match
             </span>
@@ -325,33 +331,37 @@ export function MatchCard({
               {aiScore}% Fit
             </span>
           </div>
-          {aiReason && (
-            <p className="mt-2 text-[11px] leading-5 text-[var(--foreground)] italic">
-              ✨ {aiReason}
-            </p>
+          {aiMatchLevel && (
+            <p className="text-[10px] font-semibold text-[var(--brand-soft)] mb-2">{aiMatchLevel}</p>
           )}
-          {(aiStrengths || aiPotentialConflicts) && (
-            <div className="mt-3 space-y-2">
+          {aiSummary && (
+            <div className="mb-3">
+              <p className="text-[9px] font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-1">Summary</p>
+              <p className="text-[10px] leading-4 text-[var(--foreground)]">{aiSummary}</p>
+            </div>
+          )}
+          {(aiStrengths || aiConflicts) && (
+            <div className="space-y-2">
               {aiStrengths && aiStrengths.length > 0 && (
                 <div>
-                  <p className="text-[9px] font-semibold uppercase tracking-wider text-emerald-400 mb-1">Strengths</p>
+                  <p className="text-[9px] font-semibold uppercase tracking-wider text-[var(--brand)] mb-1">Strengths</p>
                   <ul className="space-y-0.5">
                     {aiStrengths.map((strength, idx) => (
                       <li key={idx} className="text-[10px] text-[var(--foreground)] flex items-start gap-1">
-                        <span className="text-emerald-400">✓</span>
+                        <span className="text-[var(--brand)]">✓</span>
                         <span>{strength}</span>
                       </li>
                     ))}
                   </ul>
                 </div>
               )}
-              {aiPotentialConflicts && aiPotentialConflicts.length > 0 && (
+              {aiConflicts && aiConflicts.length > 0 && (
                 <div>
-                  <p className="text-[9px] font-semibold uppercase tracking-wider text-amber-400 mb-1">Potential Conflicts</p>
+                  <p className="text-[9px] font-semibold uppercase tracking-wider text-amber-400 mb-1">Weaknesses</p>
                   <ul className="space-y-0.5">
-                    {aiPotentialConflicts.map((conflict, idx) => (
+                    {aiConflicts.map((conflict, idx) => (
                       <li key={idx} className="text-[10px] text-[var(--foreground)] flex items-start gap-1">
-                        <span className="text-amber-400">!</span>
+                        <span className="text-amber-400">⚠</span>
                         <span>{conflict}</span>
                       </li>
                     ))}
@@ -391,7 +401,7 @@ export function MatchDetailModal({
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="relative h-full max-h-[85vh] w-full max-w-xl overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--panel)] p-5 shadow-2xl sm:p-8">
+      <div className="relative h-full max-h-[85vh] w-full max-w-xl overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--panel)] p-5 sm:p-8">
         <button
           onClick={onClose}
           className="absolute right-5 top-5 flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--panel-muted)] text-[var(--foreground)] hover:bg-[var(--panel)]"
@@ -488,7 +498,7 @@ export function ChatWindow({
   const [text, setText] = React.useState("");
 
   return (
-    <div className="flex h-[600px] flex-col rounded-3xl border border-[var(--border)] bg-[var(--panel)] shadow-[var(--card-shadow)]">
+    <div className="flex h-[600px] flex-col rounded-3xl border border-[var(--border)] bg-[var(--panel)]">
       <div className="flex items-center justify-between border-b border-[var(--border)] p-4">
         <div>
           <h3 className="text-lg font-semibold">{match.name}</h3>
@@ -557,7 +567,7 @@ function MiniMeta({ label, value }: { label: string; value: string }) {
 export function LoadingView({ message }: { message: string }) {
   return (
     <main className="flex min-h-screen items-center justify-center bg-[var(--background)] px-4 text-[var(--foreground)]">
-      <div className="w-full max-w-md rounded-[28px] border border-[var(--border)] bg-[var(--panel)] p-8 text-center shadow-[var(--card-shadow)]">
+      <div className="w-full max-w-md rounded-[28px] border border-[var(--border)] bg-[var(--panel)] p-8 text-center">
         <div className="mx-auto mb-4 h-12 w-12 rounded-full border border-[var(--border-strong)] bg-[var(--panel-muted)]" />
         <p className="text-lg font-medium">{message}</p>
       </div>
@@ -567,17 +577,11 @@ export function LoadingView({ message }: { message: string }) {
 
 export function AuthView({ onDemoLogin }: { onDemoLogin: () => void }) {
   return (
-    <main className="relative min-h-screen overflow-hidden bg-[var(--background)] text-[var(--foreground)]">
-      <div className="pointer-events-none absolute inset-0 opacity-90" aria-hidden="true">
-        <div className="absolute inset-x-0 top-0 h-[420px] bg-[radial-gradient(circle_at_top,rgba(240,96,79,0.28),transparent_58%)]" />
-        <div className="absolute left-[-120px] top-32 h-72 w-72 rounded-full bg-[rgba(250,177,72,0.16)] blur-[120px]" />
-        <div className="absolute bottom-[-140px] right-[-100px] h-80 w-80 rounded-full bg-[rgba(124,156,255,0.18)] blur-[140px]" />
-      </div>
-
+    <main className="relative min-h-screen overflow-hidden text-[var(--foreground)]" style={{ background: 'linear-gradient(135deg, #f5f2f8 0%, #ebe8f0 50%, #e8e4ec 100%)' }}>
       <div className="relative mx-auto flex min-h-screen max-w-4xl items-center justify-center px-4 py-10 sm:px-6 lg:px-8">
         <div className="w-full text-center">
-          <section className="rounded-[48px] border border-[var(--border)] bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(19,22,31,0.88))] p-10 shadow-[var(--card-shadow)] backdrop-blur md:p-16">
-            <h1 className="text-6xl font-semibold tracking-[-0.08em] text-[var(--foreground)] md:text-8xl">
+          <section className="rounded-[48px] border border-[var(--border)] bg-[var(--panel)] p-10 md:p-16 shadow-lg">
+            <h1 className="text-6xl font-semibold tracking-[-0.08em] text-[var(--brand)] md:text-8xl">
               wroomies
             </h1>
             <p className="mt-4 text-xl tracking-tight text-[var(--text-secondary)] md:text-2xl">
@@ -586,13 +590,13 @@ export function AuthView({ onDemoLogin }: { onDemoLogin: () => void }) {
 
             <div className="mt-12 flex flex-col items-center gap-6">
               <button 
-                className={`${primaryButtonClass} scale-110 px-10 py-4 shadow-[0_20px_60px_rgba(240,96,79,0.35)]`} 
+                className={`${primaryButtonClass} scale-110 px-10 py-4`} 
                 onClick={() => signIn("azure-ad")}
               >
                 Continue with Bennett email
               </button>
               <button 
-                className={`${secondaryButtonClass} scale-105 border-[rgba(255,255,255,0.15)] bg-[rgba(255,255,255,0.05)] px-8 py-3`}
+                className={`${secondaryButtonClass} scale-105 border-[var(--brand)]/30 bg-[var(--brand)]/5 px-8 py-3`}
                 onClick={onDemoLogin}
               >
                 Try Demo Experience

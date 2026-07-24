@@ -34,7 +34,7 @@ export default function ExplorePage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [selectedMatchEmail, setSelectedMatchEmail] = useState<string | null>(null);
-  const [aiResults, setAiResults] = useState<Record<string, { compatibilityScore: number; reason: string; strengths?: string[]; potentialConflicts?: string[]; summary?: string }>>({});
+  const [aiResults, setAiResults] = useState<Record<string, { score: number; summary: string; strengths: string[]; conflicts: string[]; recommendation: string }>>({});
   const [analyzingEmails, setAnalyzingEmails] = useState<Record<string, boolean>>({});
 
   const userEmail = session?.user?.email ?? "";
@@ -199,16 +199,26 @@ export default function ExplorePage() {
       setAiResults((prev) => ({
         ...prev,
         [email]: {
-          compatibilityScore: data.compatibilityScore,
-          reason: data.summary,
-          strengths: data.strengths,
-          potentialConflicts: data.potentialConflicts,
-          summary: data.summary,
+          score: data.score || 50,
+          summary: data.summary || "Compatibility analysis complete.",
+          strengths: data.strengths || [],
+          conflicts: data.conflicts || [],
+          recommendation: data.recommendation || "Moderate Match",
         },
       }));
     } catch (err: any) {
       console.error("AI Lifestyle Match Analysis error:", err);
       setError(err?.message || "An unexpected error occurred during AI analysis.");
+      setAiResults((prev) => ({
+        ...prev,
+        [email]: {
+          score: 50,
+          summary: "Compatibility analysis is temporarily unavailable.",
+          strengths: ["Unable to analyze"],
+          conflicts: ["Try again later"],
+          recommendation: "Moderate Match",
+        },
+      }));
     } finally {
       setAnalyzingEmails((prev) => ({ ...prev, [email]: false }));
     }
@@ -267,10 +277,6 @@ export default function ExplorePage() {
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-[var(--background)] text-[var(--foreground)]">
-      <div className="pointer-events-none absolute inset-0 opacity-95" aria-hidden="true">
-        <div className="absolute inset-x-0 top-0 h-[460px] bg-[radial-gradient(circle_at_top,rgba(240,96,79,0.26),transparent_60%)]" />
-      </div>
-
       <div className="relative mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
         <Link href="/" className="mb-6 inline-flex items-center gap-2 text-sm text-[var(--brand)] hover:underline">
           ← Back to matches
@@ -307,11 +313,13 @@ export default function ExplorePage() {
                   onMessage={(m) => {
                     window.location.href = `/?chat=${m.email}`;
                   }}
-                  aiScore={aiResults[match.email]?.compatibilityScore}
-                  aiReason={aiResults[match.email]?.reason}
+                  aiScore={aiResults[match.email]?.score}
+                  aiMatchLevel={aiResults[match.email]?.recommendation}
+                  aiSummary={aiResults[match.email]?.summary}
                   aiStrengths={aiResults[match.email]?.strengths}
-                  aiPotentialConflicts={aiResults[match.email]?.potentialConflicts}
+                  aiConflicts={aiResults[match.email]?.conflicts}
                   isAnalyzing={analyzingEmails[match.email]}
+                  isAcademicMatch={false}
                 />
               ))}
             </div>

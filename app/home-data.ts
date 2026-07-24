@@ -482,8 +482,16 @@ export function calculateMatch(userA: UserProfile, userB: UserProfile) {
   const yrA = parseInt(userA.year || "0");
   const yrB = parseInt(userB.year || "0");
   const yearDiff = Math.abs(yrA - yrB);
+  const courseA = userA.course?.toLowerCase() || "";
+  const courseB = userB.course?.toLowerCase() || "";
+  const sameCourse = courseA === courseB;
   
   // Only same-year students are eligible for matching
+  // Exception: if different year AND different course, exclude completely
+  if (yearDiff !== 0 && !sameCourse) {
+    return { primaryScore: 0, preferenceScore: 0, totalScore: 0, score: 0, reasons: ["Different academic year and course"] };
+  }
+  
   if (yearDiff !== 0) {
     return { primaryScore: 0, preferenceScore: 0, totalScore: 0, score: 0, reasons: ["Different academic year"] };
   }
