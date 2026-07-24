@@ -176,10 +176,34 @@ function HomeContent() {
           .from("users")
           .select("email, name, year, course, gender, preferences, room_number, is_open_to_switch")
           .eq("email", userEmail)
-          .single();
+          .maybeSingle();
 
         if (fetchError) {
           setError(`Could not load profile: ${fetchError.message}`);
+          return;
+        }
+
+        if (!data) {
+          // Naya user hai, profile abhi nahi bana — default values set karo
+          setYear("1");
+          setCourse("btech");
+          setGender("male");
+          setRoomNumber("");
+          setIsOpenToSwitch(false);
+          setAnswers({});
+          // Set minimal profile state so UI doesn't break
+          setProfile({
+            email: userEmail,
+            name: session?.user?.name ?? "",
+            year: "1",
+            course: "btech",
+            gender: "male",
+            room_number: "",
+            is_open_to_switch: false,
+            preferences: {}
+          });
+          setActiveTab("profile");
+          setLoadingProfile(false);
           return;
         }
 
@@ -202,7 +226,7 @@ function HomeContent() {
   }, [userEmail]);
 
   useEffect(() => {
-    if (!userEmail) return;
+    if (!userEmail || !profile) return;
 
     const fetchMatchRequests = async () => {
       if (isDemoMode) {
@@ -312,7 +336,7 @@ function HomeContent() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [userEmail]);
+  }, [userEmail, profile]);
 
   useEffect(() => {
     if (chatEmail && chatUsers.length > 0) {
