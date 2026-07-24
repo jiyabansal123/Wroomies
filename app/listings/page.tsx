@@ -24,6 +24,7 @@ export default function ListingsPage() {
   const [amenities, setAmenities] = useState<string[]>([]);
   const [distanceFilter, setDistanceFilter] = useState<string>("");
   const [occupancyType, setOccupancyType] = useState<string>("");
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
 
   useEffect(() => {
     fetchListings();
@@ -183,7 +184,207 @@ export default function ListingsPage() {
               Browse available rooms, PGs, and flats from students
             </p>
           </div>
+          {/* Mobile Filter Toggle */}
+          <button
+            onClick={() => setShowMobileFilters(true)}
+            className="ml-auto rounded-full border border-[var(--border)] bg-[var(--panel-muted)] p-2 lg:hidden"
+          >
+            <svg className="h-5 w-5 text-[var(--foreground)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+            </svg>
+          </button>
         </div>
+
+        {/* Mobile Filter Modal */}
+        {showMobileFilters && (
+          <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 lg:hidden">
+            <div className="w-full max-w-lg rounded-t-2xl border border-[var(--border)] bg-[var(--panel-muted)] p-5">
+              <div className="mb-4 flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-[var(--foreground)]">Filters</h2>
+                <button
+                  onClick={() => setShowMobileFilters(false)}
+                  className="rounded-full p-2 text-[var(--foreground)] hover:bg-[var(--panel)]"
+                >
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              
+              {/* Mobile Filter Content - Same as sidebar */}
+              <div className="max-h-[70vh] space-y-4 overflow-y-auto">
+                {/* Rent Range */}
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-[var(--foreground)]">
+                    Rent Range (₹)
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      placeholder="Min"
+                      value={rentMin}
+                      onChange={(e) => setRentMin(e.target.value ? parseInt(e.target.value) : "")}
+                      className="w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--brand)] focus:ring-1 focus:ring-[var(--brand)]"
+                    />
+                    <input
+                      type="number"
+                      placeholder="Max"
+                      value={rentMax}
+                      onChange={(e) => setRentMax(e.target.value ? parseInt(e.target.value) : "")}
+                      className="w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--brand)] focus:ring-1 focus:ring-[var(--brand)]"
+                    />
+                  </div>
+                </div>
+
+                {/* Property Type */}
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-[var(--foreground)]">
+                    Property Type
+                  </label>
+                  <div className="space-y-2">
+                    {["PG", "Flat", "Hostel", "Independent Room"].map((type) => (
+                      <label key={type} className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={propertyTypes.includes(type)}
+                          onChange={() => togglePropertyType(type)}
+                          className="h-4 w-4 rounded border-[var(--border)] bg-[var(--panel)] text-[var(--brand)] focus:ring-[var(--brand)]"
+                        />
+                        <span className="text-sm text-[var(--foreground)]">{type}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Gender Preference */}
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-[var(--foreground)]">
+                    Gender Preference
+                  </label>
+                  <select
+                    value={genderPreference}
+                    onChange={(e) => setGenderPreference(e.target.value)}
+                    className="w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--brand)] focus:ring-1 focus:ring-[var(--brand)]"
+                  >
+                    <option value="">All</option>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Any">Any</option>
+                  </select>
+                </div>
+
+                {/* Immediate Move-in */}
+                <div>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={immediateMoveIn}
+                      onChange={(e) => setImmediateMoveIn(e.target.checked)}
+                      className="h-4 w-4 rounded border-[var(--border)] bg-[var(--panel)] text-[var(--brand)] focus:ring-[var(--brand)]"
+                    />
+                    <span className="text-sm text-[var(--foreground)]">Immediate Move-in</span>
+                  </label>
+                </div>
+
+                {/* BHK Type */}
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-[var(--foreground)]">
+                    BHK Type
+                  </label>
+                  <div className="space-y-2">
+                    {["1BHK", "2BHK", "3BHK", "4BHK", "Studio"].map((type) => (
+                      <label key={type} className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={bhkTypes.includes(type)}
+                          onChange={() => toggleBhkType(type)}
+                          className="h-4 w-4 rounded border-[var(--border)] bg-[var(--panel)] text-[var(--brand)] focus:ring-[var(--brand)]"
+                        />
+                        <span className="text-sm text-[var(--foreground)]">{type}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Amenities */}
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-[var(--foreground)]">
+                    Amenities
+                  </label>
+                  <div className="space-y-2">
+                    {[
+                      { id: "wifi", label: "WiFi Available" },
+                      { id: "ac", label: "AC Available" },
+                      { id: "food", label: "Food Included" },
+                      { id: "electricity", label: "Electricity Included" },
+                      { id: "bathroom", label: "Attached Bathroom" },
+                    ].map((amenity) => (
+                      <label key={amenity.id} className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={amenities.includes(amenity.id)}
+                          onChange={() => toggleAmenity(amenity.id)}
+                          className="h-4 w-4 rounded border-[var(--border)] bg-[var(--panel)] text-[var(--brand)] focus:ring-[var(--brand)]"
+                        />
+                        <span className="text-sm text-[var(--foreground)]">{amenity.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Distance from University */}
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-[var(--foreground)]">
+                    Distance from University
+                  </label>
+                  <select
+                    value={distanceFilter}
+                    onChange={(e) => setDistanceFilter(e.target.value)}
+                    className="w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--brand)] focus:ring-1 focus:ring-[var(--brand)]"
+                  >
+                    <option value="">Any</option>
+                    <option value="1km">Upto 1km</option>
+                    <option value="2km">Upto 2km</option>
+                    <option value="5km">Upto 5km</option>
+                  </select>
+                </div>
+
+                {/* Occupancy Type */}
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-[var(--foreground)]">
+                    Occupancy Type
+                  </label>
+                  <select
+                    value={occupancyType}
+                    onChange={(e) => setOccupancyType(e.target.value)}
+                    className="w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--brand)] focus:ring-1 focus:ring-[var(--brand)]"
+                  >
+                    <option value="">Any</option>
+                    <option value="Single">Single</option>
+                    <option value="Double">Double</option>
+                    <option value="Triple">Triple</option>
+                    <option value="Shared">Shared</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="mt-4 flex gap-2">
+                <button
+                  onClick={clearFilters}
+                  className={`flex-1 ${secondaryButtonClass}`}
+                >
+                  Clear All
+                </button>
+                <button
+                  onClick={() => setShowMobileFilters(false)}
+                  className="flex-1 rounded-full bg-[var(--brand)] px-4 py-2 text-sm font-semibold text-[var(--text-on-brand)]"
+                >
+                  Apply Filters
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="flex gap-6">
           {/* Filter Sidebar */}
