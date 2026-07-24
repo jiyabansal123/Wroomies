@@ -4,6 +4,7 @@ import Link from "next/link";
 import { signOut, useSession } from "next-auth/react";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { Suspense } from "react";
 
 import { supabase } from "@/lib/supabase";
 
@@ -37,7 +38,7 @@ import {
 } from "./home-data";
 import { MatchDetailModal, ChatWindow } from "./home-ui";
 
-export default function Home() {
+function HomeContent() {
   const { data: session, status } = useSession();
   const searchParams = useSearchParams();
   const chatEmail = searchParams.get("chat");
@@ -1126,5 +1127,13 @@ function EmptyState({
         </button>
       ) : null}
     </div>
+  );
+}
+
+export default function Home() {
+  return (
+    <Suspense fallback={<LoadingView message="Loading..." />}>
+      <HomeContent />
+    </Suspense>
   );
 }
